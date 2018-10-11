@@ -578,9 +578,9 @@ class OutFile:
 
 if __name__ == '__main__':
     out_num=0
-    def tmp_3D():
+    def example_3D():
         h_fig = plt.figure(figsize=(10,8))
-        file1 = OutFile(path='/home/zming/simulations/os2D/os_PT3D4',field_name='e3',average='-savg',spec_name='plasma',out_num=out_num)
+        file1 = OutFile(path='/Path/to/OSIRIS/running/folder',field_name='e3',average='-savg',spec_name='plasma',out_num=out_num)
         h_ax = h_fig.add_subplot(221)
         file1.field_name='e3'
         file1.open()
@@ -614,10 +614,10 @@ if __name__ == '__main__':
         file1.plot_raw_hist_gamma(h_fig, h_ax, range_min=100.)
         file1.close()'''
         plt.tight_layout()
-        #plt.show()
-    def tmp_2D():
+        plt.show()
+    def example_2D():
         h_fig = plt.figure(figsize=(16.5,11))
-        file1 = OutFile(path='/home/zming/simulations/os2D/os_res2D81',field_name='charge',spec_name='e_He',out_num=out_num)
+        file1 = OutFile(path='/Path/to/OSIRIS/running/folder',field_name='charge',spec_name='e_He',out_num=out_num)
         h_ax = h_fig.add_subplot(221)
         file1.open()
         file1.read_data()
@@ -645,9 +645,9 @@ if __name__ == '__main__':
         file1.plot_data(h_fig, h_ax)#, vmax=5., vmin=-1.)
         file1.close()'''
         plt.show()
-    def cyl_m_2D():
+    def example_cyl_m_2D():
         h_fig = plt.figure(figsize=(16.5,11))
-        file1 = OutFile(path='/home/zming/simulations/os2D/os_laser3DQ3',field_name='charge',spec_name='plasma',out_num=out_num,cyl_m_num=0,cyl_m_re_im='re')
+        file1 = OutFile(path='/Path/to/OSIRIS/running/folder',field_name='charge',spec_name='plasma',out_num=out_num,cyl_m_num=0,cyl_m_re_im='re')
         h_ax = h_fig.add_subplot(221)
         file1.open()
         file1.read_data()
@@ -674,8 +674,8 @@ if __name__ == '__main__':
         print(file1._W)
         file1.close()
         plt.show()
-    def tmp_1D():
-        file1 = OutFile(path='/home/zming/simulations/os2D/os_laser1D5',field_name='e3',spec_name='e',out_num=out_num)
+    def example_1D():
+        file1 = OutFile(path='/Path/to/OSIRIS/running/folder',field_name='e3',spec_name='e',out_num=out_num)
         file1.open()
         file1.read_data()
         h_fig = plt.figure()
@@ -693,34 +693,3 @@ if __name__ == '__main__':
         file1.plot_data(h_fig, h_ax)
         file1.close()
         plt.show(block=True)
-    def test():
-        semilogy=True
-        h_fig = plt.figure(figsize=(10,8))
-        file1 = OutFile(path='/home/zming/simulations/os2D/os_PT3D3',field_name='e3',average='-savg',spec_name='plasma',out_num=out_num)
-        h_ax = h_fig.add_subplot(111)
-        file1.open()
-        file1.read_data_lineout()
-        file1.data_FFT1d()
-        file1.plot_data(h_fig, h_ax, semilogy=semilogy, linestyle='k-')
-        file1.close()
-        file1.out_num=10
-        file1.open()
-        file1.read_data_lineout()
-        file1.data_FFT1d()
-        file1.plot_data(h_fig, h_ax, semilogy=semilogy, linestyle='r-')
-        file1.close()
-        file1.out_num=20
-        file1.open()
-        file1.read_data_lineout()
-        file1.data_FFT1d()
-        file1.plot_data(h_fig, h_ax, semilogy=semilogy, linestyle='b-')
-        file1.close()
-        plt.tight_layout()
-        plt.show()
-        
-    #test()
-    for out_num in range(43,88):
-        tmp_3D()
-        plt.savefig('/home/zming/simulations/os2D/os_PT3D4/plots/{}.png'.format(out_num))
-        plt.close()
-    #cyl_m_2D()
