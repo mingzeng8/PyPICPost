@@ -178,6 +178,6 @@ class Frames:
 #        subprocess.call('mencoder \'{0}/*.png\' -mf type=png:fps=10 -ovc lavc -lavcopts vcodec=wmv2 -oac copy -o {0}/movie.mpg'.format(self.frame_path), shell=True)
 
 if __name__ == '__main__':
-    frame1 = Frames('/home/zming/simulations/os2D/os_PT3D4','/home/zming/simulations/os2D/os_PT3D4/movie1', 1, start_num = 63, count_num=1000)
+    frame1 = Frames('/Path/to/OSIRIS/running','/Path/to/frames/saving', 1, start_num = 0, count_num=1000)
     frame1.save_frames()
     #frame1.make_movie()
