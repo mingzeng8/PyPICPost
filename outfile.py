@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import TwoDGaussianFit as tdgf
 from scipy import signal, pi
 from scipy import e as const_e
+from scipy.constants import e as e_charge
 from matplotlib.colors import LogNorm
 
 float_type=np.float64
@@ -28,7 +29,7 @@ class OutFile:
         self._axis_labels_original = ('z', 'x', 'y', '$p_z$', '$p_x$', '$p_y$')
         self._axis_units_original = ('$c / \\omega_p$',)*3 + ('$m_ec$',)*3
         #self._axis_units_original = ('$k_p^{-1}$',)*3 + ('$m_ec$',)*3
-        self._field_names = {'psi':'$\psi$', 'e1':'$E_z$', 'e2':'$E_x$', 'e3':'$E_y$', 'e3_cyl_m':'$E_y$', 'b1':'$B_z$', 'b2':'$B_x$', 'b3':'$B_y$', 'j1':'$J_z$', 'ene':'$E_k / n_p m_e c^2$', 'charge':'$\\rho$', 'ion_charge':'$\\rho$', 'p1x1':'$p_1x_1$ [arb. units]', 'p2x2':'$p_2x_2$ [arb. units]'}
+        self._field_names = {'psi':'$\psi$', 'e1':'$E_z$', 'e2':'$E_x$', 'e3':'$E_y$', 'e3_cyl_m':'$E_y$', 'b1':'$B_z$', 'b2':'$B_x$', 'b3':'$B_y$', 'j1':'$J_z$', 'ene':'$E_k / n_p m_e c^2$', 'charge':'$\\rho$', 'ion_charge':'$\\rho$', 'p1x1':'$p_1x_1$ [arb. units]', 'p2x2':'$p_2x_2$ [arb. units]', 'beam_charge':'$\\rho_b$', 'plasma_charge':'$\\rho_e$'}
         self._accepted_out_type = {'DENSITY', 'FLD', 'FLD_CYL_M', 'ION', 'PHA', 'RAW'}
             
 
@@ -179,11 +180,23 @@ class OutFile:
             if 'RAW' == self._out_type:
                 return
 ##value _num_dimensions##
-            self._num_dimensions = len(self.fileid['AXIS'].keys())
+            try:
+                #try to read the dimension from 'AXIS'
+                self._num_dimensions = len(self.fileid['AXIS'].keys())
 ##value _axis_range##
-            self._axis_range = np.zeros((2,self._num_dimensions), dtype=float_type)
-            for i in range(self._num_dimensions):
-                self.fileid['AXIS/AXIS{0}'.format(i+1)].read_direct(self._axis_range, np.s_[:], np.s_[:,i])
+                self._axis_range = np.zeros((2,self._num_dimensions), dtype=float_type)
+                for i in range(self._num_dimensions):
+                    self.fileid['AXIS/AXIS{0}'.format(i+1)].read_direct(self._axis_range, np.s_[:], np.s_[:,i])
+            except KeyError:
+                #when 'AXIS' does not exist, eg. output from HiPACE, read from the attribute
+                xmax = self.fileid.attrs.get('XMAX')
+                xmin = self.fileid.attrs.get('XMIN')
+                self._num_dimensions = len(xmax)
+##value _axis_range##
+                self._axis_range = np.zeros((2,self._num_dimensions), dtype=float_type)
+                for i in range(self._num_dimensions):
+                    self._axis_range[0,i] = xmin[i]
+                    self._axis_range[1,i] = xmax[i]
             for i in self.fileid.keys():
                 if i!='AXIS':
                     break
@@ -204,8 +217,12 @@ class OutFile:
 
 ################################method read_raw_ene################################
     def read_raw_ene(self):
-        self._raw_ene = np.zeros(self.fileid['ene'].shape, dtype=float_type)
-        self.fileid['ene'].read_direct(self._raw_ene)
+        try:
+            self._raw_ene = np.zeros(self.fileid['ene'].shape, dtype=float_type)
+            self.fileid['ene'].read_direct(self._raw_ene)
+        except KeyError:
+            print('Warning! Key \'ene\' does not exist in particle raw data! Reading p1, p2, p3 and doing ene=sqrt(p1^2+p2^2+p3^2)-1 instead. Please make sure p1, p2, p3 are read before this!')
+            self._raw_ene = np.sqrt(np.square(self._raw_p1)+np.square(self._raw_p2)+np.square(self._raw_p3))-1.
 
 ################################method read_raw_x1################################
     def read_raw_x1(self):
@@ -217,6 +234,11 @@ class OutFile:
         self._raw_x2 = np.zeros(self.fileid['x2'].shape, dtype=float_type)
         self.fileid['x2'].read_direct(self._raw_x2)
 
+################################method read_raw_x3################################
+    def read_raw_x3(self):
+        self._raw_x3 = np.zeros(self.fileid['x3'].shape, dtype=float_type)
+        self.fileid['x3'].read_direct(self._raw_x3)
+
 ################################method read_raw_p1################################
     def read_raw_p1(self):
         self._raw_p1 = np.zeros(self.fileid['p1'].shape, dtype=float_type)
@@ -226,6 +248,54 @@ class OutFile:
     def read_raw_p2(self):
         self._raw_p2 = np.zeros(self.fileid['p2'].shape, dtype=float_type)
         self.fileid['p2'].read_direct(self._raw_p2)
+
+################################method read_raw_p3################################
+    def read_raw_p3(self):
+        self._raw_p3 = np.zeros(self.fileid['p3'].shape, dtype=float_type)
+        self.fileid['p3'].read_direct(self._raw_p3)
+
+################################method calculate_q_pC################################
+# calculate the charge in unit of pico-coulumb
+# please call read_raw_q() before this function
+    def calculate_q_pC(self, n0_per_cc, dx_norm, dy_norm, dz_norm):
+        '''
+        n0_per_cc: reference density in simulation, in unit of per centimeter cube
+        dx_norm, dy_norm, dz_norm: normalized dx, dy, dz
+        one_over_k0_um: one over k0, in unit of micrometer
+        one_over_k0_um = (3.541e-20*n0_per_cc)^-0.5
+        '''
+        return np.sum(self._raw_q)*e_charge*dx_norm*dy_norm*dz_norm/np.sqrt(n0_per_cc)*1.5e29
+
+################################method calculate_norm_rms_emittance_um################################
+# calculate the normalized rms emittance in unit of micrometer radian
+# please call read_raw_x2(), read_raw_p2() and/or read_raw_x3(), read_raw_p3()
+# and/or read_raw_x1(), read_raw_p1()
+# and read_raw_q() before this function
+    def calculate_norm_rms_emittance_um(self, n0_per_cc, directions=(2,)):
+        '''
+        n0_per_cc: reference density in simulation, in unit of per centimeter cube
+        one_over_k0_um: one over k0, in unit of micrometer
+        one_over_k0_um = (3.541e-20*n0_per_cc)^-0.5
+        '''
+        one_over_k0_um = (3.541e-20*n0_per_cc)**-0.5
+        emittances=np.zeros(len(directions))
+        weights=np.absolute(self._raw_q)
+        sum_weight=np.sum(weights)
+        for i in range(len(directions)):
+            if 3==directions[i]:
+                x=self._raw_x3
+                p=self._raw_p3
+            elif 1==directions[i]:
+                x=self._raw_x1
+                p=self._raw_p1
+            else:
+                x=self._raw_x2
+                p=self._raw_p2
+            term1=np.sum(np.multiply(np.square(x), weights))/sum_weight
+            term2=np.sum(np.multiply(np.square(p), weights))/sum_weight
+            term3=np.sum(np.multiply(np.multiply(x, p), weights))/sum_weight
+            emittances[i]=np.sqrt(term1*term2-term3*term3)*one_over_k0_um
+        return emittances
 
 ################################method read_data################################
     def read_data(self):
@@ -241,21 +311,28 @@ class OutFile:
         self._fig_title = 't = {0:.2f}'.format(self.fileid.attrs['TIME'][0])
 
 ################################method read_data_slice################################
-    def read_data_slice(self, dir = 2, pos =0.):
+    def read_data_slice(self, dir = 2, pos = None):
         '''dir is the direction perpendicular to the slice plane'''
         if 3 > self._num_dimensions:
             raise RuntimeError('Method OutFile.read_data_slice() cannot work on data with dimension number < 3!')
         if dir not in range (3):
             raise ValueError('Slice direction should be 0, 1 or 2!')
-        #get the index of the nearest grid. +0.5 here has a similar effect of rounding.
-        pos_index = int((pos - self._axis_range[0, dir]) / self._cell_size[dir] + 0.5)
         tmp_len = self.fileid[self._data_name_in_file].shape[2-dir]
-        if tmp_len<=pos_index:
-            print('Warning: pos is larger than the upper bundary! Force slicing at the upper bundary.')
-            pos_index = tmp_len-1
-        elif 0>pos_index:
-            print('Warning: pos is smaller than the lower bundary! Force slicing at the lower bundary.')
-            pos_index = 0
+        if pos is None:
+            #set pos at the middle of the box
+            pos = (self._axis_range[0, dir] + self._axis_range[1, dir])/2.
+            pos_index = int(tmp_len/2.)
+        else:
+            #get the index of the nearest grid. +0.5 here has a similar effect of rounding.
+            pos_index = int((pos - self._axis_range[0, dir]) / self._cell_size[dir] + 0.5)
+            if tmp_len<=pos_index:
+                print('Warning: pos is larger than the upper bundary! Force slicing at the upper bundary.')
+                pos_index = tmp_len-1
+                pos = self._axis_range[1, dir]
+            elif 0>pos_index:
+                print('Warning: pos is smaller than the lower bundary! Force slicing at the lower bundary.')
+                pos_index = 0
+                pos = self._axis_range[0, dir]
         new_shape = [self.fileid[self._data_name_in_file].shape[i] for i in range(3) if 2-dir != i]
         self._data = np.zeros(new_shape, dtype=float_type)
         slice_tuple = tuple([slice(None, None, None) if 2-dir != i else pos_index for i in range(3)])
@@ -307,7 +384,8 @@ class OutFile:
             raise ValueError('Lineout direction should be in range({0})!'.format(self._num_dimensions))
         #get the index of the nearest grid. +0.5 here has a similar effect of rounding.
         tmp_array = np.transpose(np.array([[self._axis_range[0, i], self._cell_size[i]] for i in range(self._num_dimensions) if i!=dir]))
-        pos_index = ((np.array(pos) - tmp_array[0, :]) / tmp_array[1, :] + 0.5).astype(np.int, copy=False)
+        #bug occurs here if without [:self._num_dimensions-1]: pos_index has two elements, but it is expected to have only one. Now fixed!
+        pos_index = ((np.array(pos[:self._num_dimensions-1]) - tmp_array[0, :]) / tmp_array[1, :] + 0.5).astype(np.int, copy=False)
         pos_index = pos_index.tolist()
         tmp_len = [self.fileid[self._data_name_in_file].shape[self._num_dimensions-1-i] for i in range(self._num_dimensions) if i!=dir]
         for i in range(self._num_dimensions-1):
@@ -363,7 +441,7 @@ class OutFile:
         #plt.show()
 
 ################################method plot_data_line################################
-    def plot_data_line(self, h_fig=None, h_ax=None, semilogy=False, linestyle='', if_xlabel=True, if_ylabel=True, if_title=True):
+    def plot_data_line(self, h_fig=None, h_ax=None, semilogy=False, linestyle='', if_xlabel=True, if_ylabel=True, if_title=True, multiple=1., offset=0.):
         '''Plot 1D data in a line. h_ax is the handle of the axis to be plotted on. If h_ax=None, a new figure and axis is created.'''
         if self._data.ndim!=1:
             raise RuntimeError('Data is not one dimensional! The OutFile.plot_data_line() method cannot proceed.')
@@ -375,12 +453,14 @@ class OutFile:
             plotfunc=h_ax.semilogy
         else:
             plotfunc=h_ax.plot
-        plotfunc(np.mgrid[self._axis_slices[0]], self._data, linestyle)
+        plotfunc(np.mgrid[self._axis_slices[0]], (self._data*multiple)+offset, linestyle)
         if if_xlabel:
             h_ax.set_xlabel('{0} [{1}]'.format(self._axis_labels[0], self._axis_units[0]))
         #h_ax.set_ylabel(self._field_names[self._data_name_in_file])
         if if_ylabel:
-            h_ax.set_ylabel('{0} [{1}]'.format(self._axis_labels[1], self._axis_units[1]))
+            if len(self._axis_labels)>=2:
+                h_ax.set_ylabel('{0} [{1}]'.format(self._axis_labels[1], self._axis_units[1]))
+            #if len(self._axis_labels)<2, calling this will cause an error
         if if_title:
             h_ax.set_title(self._fig_title)
         return h_fig, h_ax
@@ -426,14 +506,28 @@ class OutFile:
                 hist[bar_num]+=abs(self._raw_q[i])'''
         weights=np.absolute(self._raw_q)
         hist, bin_edges = np.histogram(self._raw_p1, num_bins, (range_min, range_max), weights=weights)
+        bin_edges = bin_edges[0:-1]
         #h_ax.plot(np.arange(range_min, range_max+dn, dn, dtype=float_type), hist)
         #average = np.average(self._raw_p1, weights=weights)
         p = (np.average((np.absolute(self._raw_p1)), weights=weights))
-        h_ax.plot(bin_edges[0:-1], hist)
+        h_ax.plot(bin_edges, hist)
         h_ax.set_xlabel('$p_z$ [$m_ec$]')
         h_ax.set_ylabel('Counts [arbt. units]')
         h_ax.set_title('$p_z$ histogram. $\\|p_z\\|$ average = {0:.2f}'.format(p))
-        return h_fig, h_ax
+        return h_fig, h_ax, bin_edges, hist
+
+################################method plot_raw_hist_gamma################################
+    def raw_hist_gamma(self, num_bins=256, range_max=None, range_min=None):
+        '''Get histogram from ene raw data +1 = gamma.'''
+        if range_max is None:
+            range_max = self._raw_ene.max()+1.
+        if range_min is None:
+            range_min = self._raw_ene.min()+1.
+        weights=np.absolute(self._raw_q)
+        hist, bin_edges = np.histogram(self._raw_ene+1., num_bins, (range_min, range_max), weights=weights)
+        bin_edges = bin_edges[0:-1]
+        gamma_ave = (np.average(self._raw_ene+1., weights=weights))
+        return bin_edges, hist, gamma_ave
 
 ################################method plot_raw_hist_gamma################################
     def plot_raw_hist_gamma(self, h_fig=None, h_ax=None, num_bins=256, range_max=None, range_min=None):
@@ -442,18 +536,12 @@ class OutFile:
             h_fig = plt.figure()
         if h_ax is None:
             h_ax = h_fig.add_subplot(111)
-        if range_max is None:
-            range_max = self._raw_ene.max()+1.
-        if range_min is None:
-            range_min = self._raw_ene.min()+1.
-        weights=np.absolute(self._raw_q)
-        hist, bin_edges = np.histogram(self._raw_ene+1., num_bins, (range_min, range_max), weights=weights)
-        gamma_ave = (np.average(self._raw_ene+1., weights=weights))
-        h_ax.plot(bin_edges[0:-1], hist)
+        bin_edges, hist, gamma_ave = self.raw_hist_gamma(num_bins, range_max, range_min)
+        h_ax.plot(bin_edges, hist)
         h_ax.set_xlabel('$\\gamma$')
         h_ax.set_ylabel('Counts [arbt. units]')
         h_ax.set_title('$\\gamma$ histogram. $\\gamma$ average = {0:.2f}'.format(gamma_ave))
-        return h_fig, h_ax
+        return h_fig, h_ax, bin_edges, hist
 
 ################################method plot_data################################
     def plot_data(self, *args, **kwargs):
@@ -577,47 +665,52 @@ class OutFile:
 #not completed
 
 if __name__ == '__main__':
-    out_num=0
-    def example_3D():
+    out_num=990
+    def tmp_3D():
         h_fig = plt.figure(figsize=(10,8))
-        file1 = OutFile(path='/Path/to/OSIRIS/running/folder',field_name='e3',average='-savg',spec_name='plasma',out_num=out_num)
+        file1 = OutFile(path='/home/zming/simulations/os2D/Hi_beam3D52',field_name='charge',average='',spec_name='beam',out_num=out_num)
         h_ax = h_fig.add_subplot(221)
-        file1.field_name='e3'
         file1.open()
-        file1.read_data_slice()
-        file1.plot_data(h_fig, h_ax)#, vmax=5., vmin=-5.)
+        file1.read_data_slice(dir=1)
+        file1.plot_data(h_fig, h_ax, vmax=0., vmin=-1.)
         file1.close()
+        file1.spec_name='plasma'
         h_ax = h_fig.add_subplot(222)
         file1.open()
-        file1.read_data_lineout()
-        file1.data_FFT1d()
-        file1.plot_data(h_fig, h_ax)
-        h_ax.set_xlim(70.,90.)
-        h_ax.set_ylim(bottom=0.0)
+        file1.read_data_slice(dir=1)
+        file1.plot_data(h_fig, h_ax)#, vmax=5., vmin=-5.)
         file1.close()
-        h_ax = h_fig.add_subplot(223)
+
+        file1.field_name='raw'
+        file1.spec_name='driver'
         file1.open()
-        file1.read_data_project(if_abs=True)
-        file1.plot_data(h_fig, h_ax)
-        file1.close()
-        h_ax = h_fig.add_subplot(224)
-        file1.field_name='charge'
-        file1.open()
-        file1.read_data_slice()
-        file1.plot_data(h_fig, h_ax, vmax=0., vmin=-50.)
-        file1.close()
-        '''h_ax = h_fig.add_subplot(224)
-        file1.field_name = 'raw'
-        file1.open()
-        file1.read_raw_ene()
         file1.read_raw_q()
-        file1.plot_raw_hist_gamma(h_fig, h_ax, range_min=100.)
-        file1.close()'''
+        print('driver charge = {} pC'.format(file1.calculate_q_pC(4.9e16, 10./256, 8./256, 8./256)))
+        file1.read_raw_p1()
+        file1.read_raw_p2()
+        file1.read_raw_p3()
+        file1.read_raw_ene()
+        h_ax = h_fig.add_subplot(223)
+        file1.plot_raw_hist_gamma(h_fig, h_ax)
+        file1.close()
+
+        file1.field_name='raw'
+        file1.spec_name='trailer'
+        file1.open()
+        file1.read_raw_q()
+        print('trailer charge = {}'.format(file1.calculate_q_pC(4.9e16, 10./256, 8./256, 8./256)))
+        file1.read_raw_p1()
+        file1.read_raw_p2()
+        file1.read_raw_p3()
+        file1.read_raw_ene()
+        h_ax = h_fig.add_subplot(224)
+        file1.plot_raw_hist_gamma(h_fig, h_ax)
+        file1.close()
         plt.tight_layout()
         plt.show()
-    def example_2D():
+    def tmp_2D():
         h_fig = plt.figure(figsize=(16.5,11))
-        file1 = OutFile(path='/Path/to/OSIRIS/running/folder',field_name='charge',spec_name='e_He',out_num=out_num)
+        file1 = OutFile(path='/home/zming/simulations/os2D/os_res2D81',field_name='charge',spec_name='e_He',out_num=out_num)
         h_ax = h_fig.add_subplot(221)
         file1.open()
         file1.read_data()
@@ -645,9 +738,9 @@ if __name__ == '__main__':
         file1.plot_data(h_fig, h_ax)#, vmax=5., vmin=-1.)
         file1.close()'''
         plt.show()
-    def example_cyl_m_2D():
+    def cyl_m_2D():
         h_fig = plt.figure(figsize=(16.5,11))
-        file1 = OutFile(path='/Path/to/OSIRIS/running/folder',field_name='charge',spec_name='plasma',out_num=out_num,cyl_m_num=0,cyl_m_re_im='re')
+        file1 = OutFile(path='/home/zming/simulations/os2D/os_laser3DQ3',field_name='charge',spec_name='plasma',out_num=out_num,cyl_m_num=0,cyl_m_re_im='re')
         h_ax = h_fig.add_subplot(221)
         file1.open()
         file1.read_data()
@@ -674,8 +767,8 @@ if __name__ == '__main__':
         print(file1._W)
         file1.close()
         plt.show()
-    def example_1D():
-        file1 = OutFile(path='/Path/to/OSIRIS/running/folder',field_name='e3',spec_name='e',out_num=out_num)
+    def tmp_1D():
+        file1 = OutFile(path='/home/zming/simulations/os2D/os_laser1D5',field_name='e3',spec_name='e',out_num=out_num)
         file1.open()
         file1.read_data()
         h_fig = plt.figure()
@@ -693,3 +786,35 @@ if __name__ == '__main__':
         file1.plot_data(h_fig, h_ax)
         file1.close()
         plt.show(block=True)
+    def test():
+        semilogy=True
+        h_fig = plt.figure(figsize=(10,8))
+        file1 = OutFile(path='/home/zming/simulations/os2D/os_PT3D3',field_name='e3',average='-savg',spec_name='plasma',out_num=out_num)
+        h_ax = h_fig.add_subplot(111)
+        file1.open()
+        file1.read_data_lineout()
+        file1.data_FFT1d()
+        file1.plot_data(h_fig, h_ax, semilogy=semilogy, linestyle='k-')
+        file1.close()
+        file1.out_num=10
+        file1.open()
+        file1.read_data_lineout()
+        file1.data_FFT1d()
+        file1.plot_data(h_fig, h_ax, semilogy=semilogy, linestyle='r-')
+        file1.close()
+        file1.out_num=20
+        file1.open()
+        file1.read_data_lineout()
+        file1.data_FFT1d()
+        file1.plot_data(h_fig, h_ax, semilogy=semilogy, linestyle='b-')
+        file1.close()
+        plt.tight_layout()
+        plt.show()
+        
+    #test()
+    #for out_num in range(43,88):
+    #    tmp_3D()
+    #    plt.savefig('/home/zming/simulations/os2D/os_PT3D4/plots/{}.png'.format(out_num))
+    #    plt.close()
+    #cyl_m_2D()
+    tmp_3D()

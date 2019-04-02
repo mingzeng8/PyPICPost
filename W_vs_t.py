@@ -2,9 +2,7 @@ import outfile
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-'''
-Usage: python3 W_vs_t.py [-s/c] 123
-'''
+
 def plot_W_vs_t(path, field_name='e3', species_name='', average='', cyl_m='False', start=0, count=0, stride=1):
     '''Plot the W evolution'''
     if not isinstance(path, str):
@@ -79,12 +77,14 @@ if __name__ == '__main__':
     #prefix='PT3D'
     prefix='laser3D'
     print('Working on os_'+prefix+fnum+'...')
-    t_W_array, h_fig = plot_W_vs_t('/Paht/to/OSIRIS/running/os_'+prefix+fnum, 'e3', average=average, cyl_m=parser.parse_args().cyl_m, start=0, count=600, stride=1)
+    #if fnum[-1]=='h':
+    #    average='-savg'
+    t_W_array, h_fig = plot_W_vs_t('/home/zming/simulations/os2D/os_'+prefix+fnum, 'e3', average=average, cyl_m=parser.parse_args().cyl_m, start=0, count=600, stride=1)
     print(t_W_array)
-    plot_save_name='/Paht/to/plot/save/os_{0}{1}/{0}{1}.png'.format(prefix,fnum)
+    plot_save_name='/home/zming/simulations/os2D/os_{0}{1}/{0}{1}.png'.format(prefix,fnum)
     plt.savefig(plot_save_name)
     print('Plot saved at '+plot_save_name)
-    data_save_name='/Paht/to/data/save//os_{0}{1}/{0}{1}.data'.format(prefix,fnum)
+    data_save_name='/home/zming/simulations/os2D/os_{0}{1}/{0}{1}.data'.format(prefix,fnum)
     np.savetxt(data_save_name, np.array(t_W_array), delimiter=',', fmt='%.5f')
     print('Data saved at '+data_save_name)
     plt.show(block=True)
