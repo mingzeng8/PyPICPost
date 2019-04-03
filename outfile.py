@@ -186,7 +186,7 @@ class OutFile:
     def open(self):
         self.fileid = h5py.File(self.path_filename,'r')
         if self._out_type in self._accepted_out_type:
-            if 'RAW' == self._out_type:
+            '''if 'RAW' == self._out_type:
                 return
 ##value _num_dimensions##
             try:
@@ -197,27 +197,29 @@ class OutFile:
                 for i in range(self._num_dimensions):
                     self.fileid['AXIS/AXIS{0}'.format(i+1)].read_direct(self._axis_range, np.s_[:], np.s_[:,i])
             except KeyError:
-                #when 'AXIS' does not exist, eg. output from HiPACE, read from the attribute
-                xmax = self.fileid.attrs.get('XMAX')
-                xmin = self.fileid.attrs.get('XMIN')
-                self._num_dimensions = len(xmax)
+                #when 'AXIS' does not exist, eg. output from HiPACE, read from the attribute'''
+            xmax = self.fileid.attrs.get('XMAX')
+            xmin = self.fileid.attrs.get('XMIN')
+            nx = self.fileid.attrs.get('NX')
+            self._num_dimensions = len(xmax)
 ##value _axis_range##
-                self._axis_range = np.zeros((2,self._num_dimensions), dtype=float_type)
-                for i in range(self._num_dimensions):
-                    self._axis_range[0,i] = xmin[i]
-                    self._axis_range[1,i] = xmax[i]
-            for i in self.fileid.keys():
-                if i!='AXIS':
-                    break
+            self._axis_range = np.zeros((2,self._num_dimensions), dtype=float_type)
+            for i in range(self._num_dimensions):
+                self._axis_range[0,i] = xmin[i]
+                self._axis_range[1,i] = xmax[i]
+            if 'RAW' != self._out_type:
+                for i in self.fileid.keys():
+                    if i!='AXIS':
+                        break
 ##value _data_name_in_file##
-            self._data_name_in_file = i
+                self._data_name_in_file = i
 ##value _cell_size##
-            if 'osiris' == self.code_name:
-            #In osiris, the data 3 dimensions correspond to dir = 2, 1, 0, respectively. So we need to flip the shape tuple here.
-                self._cell_size = (self._axis_range[1, :] - self._axis_range[0, :]) / np.flipud(self.fileid[self._data_name_in_file].shape)
-            elif 'hipace' == self.code_name:
+            #if 'osiris' == self.code_name:
+            #In osiris, the data 3 dimensions correspond to dir = 2, 1, 0, respectively.
             #In hipace, the data 3 dimensions correspond to dir = 0, 1, 2, respectively.
-                self._cell_size = (self._axis_range[1, :] - self._axis_range[0, :]) / self.fileid[self._data_name_in_file].shape
+            #    self._cell_size = (self._axis_range[1, :] - self._axis_range[0, :]) / np.flipud(self.fileid[self._data_name_in_file].shape)
+            #elif 'hipace' == self.code_name:
+            self._cell_size = (self._axis_range[1, :] - self._axis_range[0, :]) / nx
 
 ################################method close################################
     def close(self):
@@ -229,12 +231,15 @@ class OutFile:
         self.fileid['q'].read_direct(self._raw_q)
 
 ################################method read_raw_ene################################
-    def read_raw_ene(self):
+    def read_raw_ene(self, ene_key_warning=True):
         try:
             self._raw_ene = np.zeros(self.fileid['ene'].shape, dtype=float_type)
             self.fileid['ene'].read_direct(self._raw_ene)
         except KeyError:
-            print('Warning! Key \'ene\' does not exist in particle raw data! Reading p1, p2, p3 and doing ene=sqrt(p1^2+p2^2+p3^2)-1 instead. Please make sure p1, p2, p3 are read before this!')
+            if ene_key_warning:
+            #by default, if 'ene' key does not exist, print the following warning message.
+            #but one can explicitly silence this message by setting ene_key_warning=False
+                print('Warning! Key \'ene\' does not exist in particle raw data! Reading p1, p2, p3 and doing ene=sqrt(p1^2+p2^2+p3^2)-1 instead. Please make sure p1, p2, p3 are read before this!')
             self._raw_ene = np.sqrt(np.square(self._raw_p1)+np.square(self._raw_p2)+np.square(self._raw_p3))-1.
 
 ################################method read_raw_x1################################
@@ -270,13 +275,19 @@ class OutFile:
 ################################method calculate_q_pC################################
 # calculate the charge in unit of pico-coulumb
 # please call read_raw_q() before this function
-    def calculate_q_pC(self, n0_per_cc, dx_norm, dy_norm, dz_norm):
+    def calculate_q_pC(self, n0_per_cc, dx_norm=None, dy_norm=None, dz_norm=None):
         '''
         n0_per_cc: reference density in simulation, in unit of per centimeter cube
         dx_norm, dy_norm, dz_norm: normalized dx, dy, dz
         one_over_k0_um: one over k0, in unit of micrometer
         one_over_k0_um = (3.541e-20*n0_per_cc)^-0.5
         '''
+        if dz_norm is None:
+            dz_norm = self._cell_size[0]
+        if dx_norm is None:
+            dx_norm = self._cell_size[1]
+        if dy_norm is None:
+            dy_norm = self._cell_size[2]
         return np.sum(self._raw_q)*e_charge*dx_norm*dy_norm*dz_norm/np.sqrt(n0_per_cc)*1.5e29
 
 ################################method calculate_norm_rms_emittance_um################################

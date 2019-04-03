@@ -16,7 +16,7 @@ def get_beam_parameters(os_file, n0_per_cc, dx, dy, dz, gamma_threshold):
     os_file.read_raw_p2()
     os_file.read_raw_p3()
     os_file.read_raw_q()
-    os_file.read_raw_ene()
+    os_file.read_raw_ene(ene_key_warning=False)
     condlist = [os_file._raw_ene>(gamma_threshold-1.)]
     os_file._raw_q = np.select(condlist, [os_file._raw_q])
     q_pC = os_file.calculate_q_pC(n0_per_cc, dx, dy, dz)
