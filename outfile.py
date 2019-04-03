@@ -275,20 +275,19 @@ class OutFile:
 ################################method calculate_q_pC################################
 # calculate the charge in unit of pico-coulumb
 # please call read_raw_q() before this function
-    def calculate_q_pC(self, n0_per_cc, dx_norm=None, dy_norm=None, dz_norm=None):
+    def calculate_q_pC(self, n0_per_cc):
         '''
         n0_per_cc: reference density in simulation, in unit of per centimeter cube
-        dx_norm, dy_norm, dz_norm: normalized dx, dy, dz
         one_over_k0_um: one over k0, in unit of micrometer
         one_over_k0_um = (3.541e-20*n0_per_cc)^-0.5
         '''
-        if dz_norm is None:
-            dz_norm = self._cell_size[0]
-        if dx_norm is None:
-            dx_norm = self._cell_size[1]
-        if dy_norm is None:
-            dy_norm = self._cell_size[2]
-        return np.sum(self._raw_q)*e_charge*dx_norm*dy_norm*dz_norm/np.sqrt(n0_per_cc)*1.5e29
+        #normalized cell volume
+        cell_volume_norm = 1.0
+        for i in range(self.num_dimensions):
+            cell_volume_norm = cell_volume_norm*self._cell_size[i]
+        if 3>self.num_dimensions:
+            print('Warning! Similation is in {} dimensional. Charge calculation may not be correct.'.format(self.num_dimensions))
+        return np.sum(self._raw_q)*e_charge*cell_volume_norm/np.sqrt(n0_per_cc)*1.5e29
 
 ################################method calculate_norm_rms_emittance_um################################
 # calculate the normalized rms emittance in unit of micrometer radian
