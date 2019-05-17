@@ -5,7 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 class Frames:
-    def __init__(self, simulation_path, frame_folder, dirver_type = 0, start_num = 0, stride_num=1, count_num=1, dirver_spec_name='driver', background_spec_name='e', trail_spec_name=None, if_e1=False, if_psi=False, dir=2, save_type='png'):
+    def __init__(self, code_name = 'osiris', simulation_path = None, frame_folder = 'Movie', dirver_type = 0, start_num = 0, stride_num=1, count_num=1, dirver_spec_name='driver', background_spec_name='e', trail_spec_name=None, if_e1=False, if_psi=False, dir=2, save_type='png'):
+        self.code_name = code_name
         self.simulation_path = simulation_path
         self.frame_path = simulation_path+'/'+frame_folder
         self.start_num = start_num
@@ -107,7 +108,7 @@ class Frames:
 #plot one frame for beam driven cases
     def plot_beam_driven(self, out_num):
         h_fig = plt.figure(figsize=(8,4.5))
-        file1 = outfile.OutFile(path=self.simulation_path, field_name='charge', average='', spec_name=self.background_spec_name, out_num=out_num)
+        file1 = outfile.OutFile(code_name = self.code_name, path=self.simulation_path, field_name='charge', average='', spec_name=self.background_spec_name, out_num=out_num)
         h_ax = h_fig.add_subplot(111)
         h_ax.set_aspect('equal','box')
         file1.open()
@@ -119,7 +120,7 @@ class Frames:
         file1.spec_name=self.dirver_spec_name
         file1.open()
         file1.read_data_slice(dir=self.dir)
-        file1.plot_data(h_fig, h_ax, vmin=-5., vmax=0, cmap=my_cmap.cmap_higher_range_transparent(plt.cm.hot))
+        file1.plot_data(h_fig, h_ax, vmin=-.5, vmax=0, cmap=my_cmap.cmap_higher_range_transparent(plt.cm.hot))
         file1._color_bar.set_label('$\\rho_d$')
         file1.close()
 
@@ -195,8 +196,8 @@ class Frames:
         try:
             for i in range(self.start_num, self.start_num+self.count_num*self.stride_num, self.stride_num):
                 self.plot_save(i)
-        except IOError:
-            print('Iteration stops at frame number {0}.'.format(i))
+        except IOError as err:
+            print('Iteration stops at frame number {0}. Exception message:\n{1}'.format(i, err))
 
 ################################method make_movie################################
 #make movie based on the saved frames
@@ -205,7 +206,7 @@ class Frames:
 #        subprocess.call('mencoder \'{0}/*.png\' -mf type=png:fps=10 -ovc lavc -lavcopts vcodec=wmv2 -oac copy -o {0}/movie.mpg'.format(self.frame_path), shell=True)
 
 if __name__ == '__main__':
-    #frame1 = Frames('/home/zming/simulations/os2D/os_PT3D4','/home/zming/simulations/os2D/os_PT3D4/movie1', 1, start_num = 63, count_num=1000)
-    frame1 = Frames('/home/zming/simulations/os2D/os_beam3D52','movie2', 0, start_num = 0, count_num=999, trail_spec_name='He_e', if_e1=True, if_psi=True, dir=2)
+    #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/mnt/os_beam3D63', frame_folder='Movie2', dirver_type = 0, start_num = 14, stride_num=1, count_num=99999, background_spec_name='e', dirver_spec_name='driver', trail_spec_name='He_e', if_e1=True, if_psi=True, dir=2)
+    frame1 = Frames(code_name = 'hipace', simulation_path = '/home/zming/simulations/os2D/Hi_beam3D63', frame_folder='Movie2', dirver_type = 0, start_num = 0, stride_num=10, count_num=99999, background_spec_name='plasma', dirver_spec_name='beam', if_e1=False, if_psi=False, dir=2)
     frame1.save_frames()
     #frame1.make_movie()

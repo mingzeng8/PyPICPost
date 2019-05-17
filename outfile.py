@@ -12,11 +12,12 @@ float_type=np.float64
 class OutFile:
     def __init__(self, code_name = 'osiris', path = '.', out_type = None, field_name = 'e3', spec_name = '', out_num = 0, average='', cyl_m_num = 0, cyl_m_re_im='re'):
 ##value digit_num##
+        self._accepted_code_name = {'osiris', 'hipace'}
         self.digit_num = 6
         self.code_name = code_name
         self.path = path
         self.spec_name = spec_name
-        self._field_name_to_out_type = {'psi':'FLD', 'e1':'FLD', 'e2':'FLD', 'e3':'FLD', 'e3_cyl_m':'FLD_CYL_M', 'b1':'FLD', 'b2':'FLD', 'b3':'FLD', 'j1':'DENSITY', 'ene':'DENSITY', 'charge':'DENSITY', 'ion_charge':'ION', 'p1x1':'PHA', 'p2x2':'PHA', 'raw':'RAW'}
+        self._field_name_to_out_type = {'psi':'FLD', 'e1':'FLD', 'e2':'FLD', 'e3':'FLD', 'e3_cyl_m':'FLD_CYL_M', 'b1':'FLD', 'b2':'FLD', 'b3':'FLD', 'j1':'DENSITY', 'ene':'DENSITY', 'charge':'DENSITY', 'ion_charge':'ION', 'p1x1':'PHA', 'p2x2':'PHA', 'raw':'RAW', 'ExmBy':'FLD', 'Ez':'FLD', 'EypBx':'FLD'}
         #self.out_type = out_type
         self.field_name = field_name
         self.out_num = out_num
@@ -29,7 +30,7 @@ class OutFile:
         self._axis_labels_original = ('z', 'x', 'y', '$p_z$', '$p_x$', '$p_y$')
         self._axis_units_original = ('$c / \\omega_p$',)*3 + ('$m_ec$',)*3
         #self._axis_units_original = ('$k_p^{-1}$',)*3 + ('$m_ec$',)*3
-        self._field_names = {'psi':'$\psi$', 'e1':'$E_z$', 'e2':'$E_x$', 'e3':'$E_y$', 'e3_cyl_m':'$E_y$', 'b1':'$B_z$', 'b2':'$B_x$', 'b3':'$B_y$', 'j1':'$J_z$', 'ene':'$E_k / n_p m_e c^2$', 'charge':'$\\rho$', 'ion_charge':'$\\rho$', 'p1x1':'$p_1x_1$ [arb. units]', 'p2x2':'$p_2x_2$ [arb. units]', 'beam_charge':'$\\rho_b$', 'plasma_charge':'$\\rho_e$'}
+        self._field_names = {'psi':'$\psi$', 'e1':'$E_z$', 'e2':'$E_x$', 'e3':'$E_y$', 'e3_cyl_m':'$E_y$', 'b1':'$B_z$', 'b2':'$B_x$', 'b3':'$B_y$', 'j1':'$J_z$', 'ene':'$E_k / n_p m_e c^2$', 'charge':'$\\rho$', 'ion_charge':'$\\rho$', 'p1x1':'$p_1x_1$ [arb. units]', 'p2x2':'$p_2x_2$ [arb. units]', 'beam_charge':'$\\rho_b$', 'plasma_charge':'$\\rho_e$', 'ExmBy':'$E_x-B_y$', 'Ez':'$E_z$', 'EypBx':'$E_y+B_x$'}
         self._accepted_out_type = {'DENSITY', 'FLD', 'FLD_CYL_M', 'ION', 'PHA', 'RAW'}
             
 
@@ -38,7 +39,7 @@ class OutFile:
         return self._code_name
 
     def set_code_name(self, value):
-        if value not in {'osiris',}:
+        if value not in self._accepted_code_name:
             raise ValueError('code_name \'{0}\' not implemented!'.format(value))
         self._code_name = value
 
@@ -119,18 +120,26 @@ class OutFile:
 
 ################################property path_filename################################
     def get_path_filename(self):
-        if 'DENSITY' == self._out_type:
-            return '{0}/MS/DENSITY/{2}/{1}{5}/{1}{5}-{2}-{3}{4}.h5'.format(self.path, self.field_name, self.spec_name, '0'*self.num_of_zeros, self.out_num, self.average)
-        elif 'ION' == self._out_type:
-            return '{0}/MS/ION/{2}/{1}/{1}-{2}-{3}{4}.h5'.format(self.path, self.field_name, self.spec_name, '0'*self.num_of_zeros, self.out_num)
-        elif 'FLD' == self._out_type:
-            return '{0}/MS/FLD/{1}{4}/{1}{4}-{2}{3}.h5'.format(self.path, self.field_name, '0'*self.num_of_zeros, self.out_num, self.average)
-        elif 'FLD_CYL_M' == self._out_type:
-            return '{0}/MS/FLD/MODE-{1}-{2}/{3}/{3}-{1}-{4}-{5}{6}.h5'.format(self.path, self.cyl_m_num, self.cyl_m_re_im.upper(), self.field_name, self.cyl_m_re_im.lower(), '0'*self.num_of_zeros, self.out_num)
-        elif 'PHA' == self._out_type:
-            return '{0}/MS/PHA/{1}/{2}/{1}-{2}-{3}{4}.h5'.format(self.path, self.field_name, self.spec_name, '0'*self.num_of_zeros, self.out_num)
-        elif 'RAW' == self._out_type:
-            return '{0}/MS/RAW/{1}/RAW-{1}-{2}{3}.h5'.format(self.path, self.spec_name, '0'*self.num_of_zeros, self.out_num)
+        if 'osiris' == self.code_name:
+            if 'DENSITY' == self._out_type:
+                return '{0}/MS/DENSITY/{2}/{1}{5}/{1}{5}-{2}-{3}{4}.h5'.format(self.path, self.field_name, self.spec_name, '0'*self.num_of_zeros, self.out_num, self.average)
+            elif 'ION' == self._out_type:
+                return '{0}/MS/ION/{2}/{1}/{1}-{2}-{3}{4}.h5'.format(self.path, self.field_name, self.spec_name, '0'*self.num_of_zeros, self.out_num)
+            elif 'FLD' == self._out_type:
+                return '{0}/MS/FLD/{1}{4}/{1}{4}-{2}{3}.h5'.format(self.path, self.field_name, '0'*self.num_of_zeros, self.out_num, self.average)
+            elif 'FLD_CYL_M' == self._out_type:
+                return '{0}/MS/FLD/MODE-{1}-{2}/{3}/{3}-{1}-{4}-{5}{6}.h5'.format(self.path, self.cyl_m_num, self.cyl_m_re_im.upper(), self.field_name, self.cyl_m_re_im.lower(), '0'*self.num_of_zeros, self.out_num)
+            elif 'PHA' == self._out_type:
+                return '{0}/MS/PHA/{1}/{2}/{1}-{2}-{3}{4}.h5'.format(self.path, self.field_name, self.spec_name, '0'*self.num_of_zeros, self.out_num)
+            elif 'RAW' == self._out_type:
+                return '{0}/MS/RAW/{1}/RAW-{1}-{2}{3}.h5'.format(self.path, self.spec_name, '0'*self.num_of_zeros, self.out_num)
+        elif 'hipace' == self.code_name:
+            if 'DENSITY' == self._out_type:
+                return '{0}/DATA/density_{1}_{2}_{3}{4}.h5'.format(self.path, self.spec_name, self.field_name, '0'*self.num_of_zeros, self.out_num)
+            elif 'FLD' == self._out_type:
+                return '{0}/DATA/field_{1}_{2}{3}.h5'.format(self.path, self.field_name, '0'*self.num_of_zeros, self.out_num)
+            elif 'RAW' == self._out_type:
+                return '{0}/DATA/raw_{1}_{2}{3}.h5'.format(self.path, self.spec_name, '0'*self.num_of_zeros, self.out_num)
 
     def set_path_filename(self):
         raise RuntimeError('You cannot set path_filename directly!')
@@ -177,20 +186,20 @@ class OutFile:
     def open(self):
         self.fileid = h5py.File(self.path_filename,'r')
         if self._out_type in self._accepted_out_type:
-            if 'RAW' == self._out_type:
-                return
 ##value _num_dimensions##
             try:
                 #try to read the dimension from 'AXIS'
+                #for the code osiris, when plotting phasespace, the data matrix size may be different from the attribute NX
                 self._num_dimensions = len(self.fileid['AXIS'].keys())
 ##value _axis_range##
                 self._axis_range = np.zeros((2,self._num_dimensions), dtype=float_type)
                 for i in range(self._num_dimensions):
                     self.fileid['AXIS/AXIS{0}'.format(i+1)].read_direct(self._axis_range, np.s_[:], np.s_[:,i])
             except KeyError:
-                #when 'AXIS' does not exist, eg. output from HiPACE, read from the attribute
+                #when 'AXIS' does not exist, eg. output from HiPACE or RAW in osiris, read from the attribute
                 xmax = self.fileid.attrs.get('XMAX')
                 xmin = self.fileid.attrs.get('XMIN')
+                nx = self.fileid.attrs.get('NX')
                 self._num_dimensions = len(xmax)
 ##value _axis_range##
                 self._axis_range = np.zeros((2,self._num_dimensions), dtype=float_type)
@@ -202,9 +211,18 @@ class OutFile:
                     break
 ##value _data_name_in_file##
             self._data_name_in_file = i
-            #In osiris, the data 3 dimensions correspond to dir = 2, 1, 0, respectively. So we need to flip the shape tuple here.
+            try:
+                nx
+            except NameError:
+                #if nx not defined, get nx from the size of the matrix. In case of code osiris, the data matrix size may be different from the attribute when plotting phasespace.
+                nx = np.flipud(self.fileid[self._data_name_in_file].shape)
 ##value _cell_size##
-            self._cell_size = (self._axis_range[1, :] - self._axis_range[0, :]) / np.flipud(self.fileid[self._data_name_in_file].shape)
+            #if 'osiris' == self.code_name:
+            #In osiris, the data 3 dimensions correspond to dir = 2, 1, 0, respectively.
+            #In hipace, the data 3 dimensions correspond to dir = 0, 1, 2, respectively.
+            #    self._cell_size = (self._axis_range[1, :] - self._axis_range[0, :]) / np.flipud(self.fileid[self._data_name_in_file].shape)
+            #elif 'hipace' == self.code_name:
+            self._cell_size = (self._axis_range[1, :] - self._axis_range[0, :]) / nx
 
 ################################method close################################
     def close(self):
@@ -216,12 +234,15 @@ class OutFile:
         self.fileid['q'].read_direct(self._raw_q)
 
 ################################method read_raw_ene################################
-    def read_raw_ene(self):
+    def read_raw_ene(self, ene_key_warning=True):
         try:
             self._raw_ene = np.zeros(self.fileid['ene'].shape, dtype=float_type)
             self.fileid['ene'].read_direct(self._raw_ene)
         except KeyError:
-            print('Warning! Key \'ene\' does not exist in particle raw data! Reading p1, p2, p3 and doing ene=sqrt(p1^2+p2^2+p3^2)-1 instead. Please make sure p1, p2, p3 are read before this!')
+            if ene_key_warning:
+            #by default, if 'ene' key does not exist, print the following warning message.
+            #but one can explicitly silence this message by setting ene_key_warning=False
+                print('Warning! Key \'ene\' does not exist in particle raw data! Reading p1, p2, p3 and doing ene=sqrt(p1^2+p2^2+p3^2)-1 instead. Please make sure p1, p2, p3 are read before this!')
             self._raw_ene = np.sqrt(np.square(self._raw_p1)+np.square(self._raw_p2)+np.square(self._raw_p3))-1.
 
 ################################method read_raw_x1################################
@@ -257,14 +278,19 @@ class OutFile:
 ################################method calculate_q_pC################################
 # calculate the charge in unit of pico-coulumb
 # please call read_raw_q() before this function
-    def calculate_q_pC(self, n0_per_cc, dx_norm, dy_norm, dz_norm):
+    def calculate_q_pC(self, n0_per_cc):
         '''
         n0_per_cc: reference density in simulation, in unit of per centimeter cube
-        dx_norm, dy_norm, dz_norm: normalized dx, dy, dz
         one_over_k0_um: one over k0, in unit of micrometer
         one_over_k0_um = (3.541e-20*n0_per_cc)^-0.5
         '''
-        return np.sum(self._raw_q)*e_charge*dx_norm*dy_norm*dz_norm/np.sqrt(n0_per_cc)*1.5e29
+        #normalized cell volume
+        cell_volume_norm = 1.0
+        for i in range(self.num_dimensions):
+            cell_volume_norm = cell_volume_norm*self._cell_size[i]
+        if 3>self.num_dimensions:
+            print('Warning! Similation is in {} dimensional. Charge calculation may not be correct.'.format(self.num_dimensions))
+        return np.sum(self._raw_q)*e_charge*cell_volume_norm/np.sqrt(n0_per_cc)*1.5e29
 
 ################################method calculate_norm_rms_emittance_um################################
 # calculate the normalized rms emittance in unit of micrometer radian
@@ -317,7 +343,12 @@ class OutFile:
             raise RuntimeError('Method OutFile.read_data_slice() cannot work on data with dimension number < 3!')
         if dir not in range (3):
             raise ValueError('Slice direction should be 0, 1 or 2!')
-        tmp_len = self.fileid[self._data_name_in_file].shape[2-dir]
+        if 'osiris' == self.code_name:
+        #in osiris, the data dimension corresponds to size in direction 2,1,0
+            tmp_len = self.fileid[self._data_name_in_file].shape[2-dir]
+        if 'hipace' == self.code_name:
+        #in hipace, the data dimension corresponds to size in direction 0,1,2
+            tmp_len = self.fileid[self._data_name_in_file].shape[dir]
         if pos is None:
             #set pos at the middle of the box
             pos = (self._axis_range[0, dir] + self._axis_range[1, dir])/2.
@@ -333,10 +364,17 @@ class OutFile:
                 print('Warning: pos is smaller than the lower bundary! Force slicing at the lower bundary.')
                 pos_index = 0
                 pos = self._axis_range[0, dir]
-        new_shape = [self.fileid[self._data_name_in_file].shape[i] for i in range(3) if 2-dir != i]
+        if 'osiris' == self.code_name:
+            new_shape = [self.fileid[self._data_name_in_file].shape[i] for i in range(3) if 2-dir != i]
+            slice_tuple = tuple([slice(None, None, None) if 2-dir != i else pos_index for i in range(3)])
+        elif 'hipace' == self.code_name:
+            new_shape = [self.fileid[self._data_name_in_file].shape[i] for i in range(3) if dir != i]
+            slice_tuple = tuple([slice(None, None, None) if dir != i else pos_index for i in range(3)])
         self._data = np.zeros(new_shape, dtype=float_type)
-        slice_tuple = tuple([slice(None, None, None) if 2-dir != i else pos_index for i in range(3)])
         self.fileid[self._data_name_in_file].read_direct(self._data, source_sel=slice_tuple)
+        if 'hipace' == self.code_name:
+        #transpose data for a "osiris" like plot. Maybe this can be made better by changing source_sel.
+            self._data = np.transpose(self._data)
         self._axis_slices = [slice(self._axis_range[0, i], self._axis_range[1, i], self._cell_size[i]) for i in range(3) if i!=dir]#this can be simplified to self._axis_slices = [self._axis_slices[i] for i in range(3) if i!=dir] but bug test is required
         self._axis_labels = [self._axis_labels_original[i] for i in range(self._num_dimensions) if i!=dir]
         self._axis_units = [self._axis_units_original[i] for i in range(self._num_dimensions) if i!=dir]
@@ -665,10 +703,10 @@ class OutFile:
 #not completed
 
 if __name__ == '__main__':
-    out_num=990
+    out_num=0
     def tmp_3D():
         h_fig = plt.figure(figsize=(10,8))
-        file1 = OutFile(path='/home/zming/simulations/os2D/Hi_beam3D52',field_name='charge',average='',spec_name='beam',out_num=out_num)
+        file1 = OutFile(code_name='hipace',path='/home/zming/simulations/os2D/Hi_test',field_name='charge',average='',spec_name='beam',out_num=out_num)
         h_ax = h_fig.add_subplot(221)
         file1.open()
         file1.read_data_slice(dir=1)
@@ -677,11 +715,11 @@ if __name__ == '__main__':
         file1.spec_name='plasma'
         h_ax = h_fig.add_subplot(222)
         file1.open()
-        file1.read_data_slice(dir=1)
+        file1.read_data_slice(dir=2)
         file1.plot_data(h_fig, h_ax)#, vmax=5., vmin=-5.)
         file1.close()
 
-        file1.field_name='raw'
+        '''file1.field_name='raw'
         file1.spec_name='driver'
         file1.open()
         file1.read_raw_q()
@@ -728,7 +766,7 @@ if __name__ == '__main__':
         file1.open()
         file1.read_data()
         file1.plot_data(h_fig, h_ax)#, vmax=3., vmin=-3.)
-        file1.close()
+        file1.close()'''
         '''
         h_ax = h_fig.add_subplot(224)
         file1.field_name = 'psi'
