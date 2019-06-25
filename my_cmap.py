@@ -17,3 +17,11 @@ def cmap_middle_range_transparent(original_cmap=plt.cm.bwr, transparency_start_r
     my_cmap[transparency_index[1]:transparency_index[2],-1] = np.zeros(transparency_index[2]-transparency_index[1])
     my_cmap[transparency_index[2]:transparency_index[3],-1] = np.linspace(0, 1, transparency_index[3]-transparency_index[2])
     return ListedColormap(my_cmap)
+
+def cmap_lower_range_transparent(original_cmap=plt.cm.jet, transparency_end_ratio=0.2):
+    ''' creat a colormap based on original_cmap, with a linear transparency transition from the lower end to (transparency_start_ratio*total range).'''
+    my_cmap = original_cmap(np.arange(original_cmap.N))
+    transparency_end=int(transparency_end_ratio*original_cmap.N)
+    my_cmap[0:transparency_end,-1] = np.linspace(0, 1, transparency_end)
+    return ListedColormap(my_cmap)
+

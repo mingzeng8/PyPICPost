@@ -175,7 +175,7 @@ class OutFile:
 
 ################################property time################################
     def get_time(self):
-        return self.fileid.attrs['TIME'][0]
+        return self._time
 
     def set_time(self, value):
         raise RuntimeError('You cannot set time directly!')
@@ -223,27 +223,23 @@ class OutFile:
             #    self._cell_size = (self._axis_range[1, :] - self._axis_range[0, :]) / np.flipud(self.fileid[self._data_name_in_file].shape)
             #elif 'hipace' == self.code_name:
             self._cell_size = (self._axis_range[1, :] - self._axis_range[0, :]) / nx
+            self._time = self.fileid.attrs['TIME'][0]
 
 ################################method close################################
     def close(self):
         self.fileid.close()
 
+################################method read_raw_tag################################
+    def read_raw_tag(self):
+        '''In osiris the tag for one macro particle has two numbers:
+           the first is the process index, and the second is the particle index.'''
+        self._raw_tag = np.zeros(self.fileid['tag'].shape, dtype=int)
+        self.fileid['tag'].read_direct(self._raw_tag)
+
 ################################method read_raw_q################################
     def read_raw_q(self):
         self._raw_q = np.zeros(self.fileid['q'].shape, dtype=float_type)
         self.fileid['q'].read_direct(self._raw_q)
-
-################################method read_raw_ene################################
-    def read_raw_ene(self, ene_key_warning=True):
-        try:
-            self._raw_ene = np.zeros(self.fileid['ene'].shape, dtype=float_type)
-            self.fileid['ene'].read_direct(self._raw_ene)
-        except KeyError:
-            if ene_key_warning:
-            #by default, if 'ene' key does not exist, print the following warning message.
-            #but one can explicitly silence this message by setting ene_key_warning=False
-                print('Warning! Key \'ene\' does not exist in particle raw data! Reading p1, p2, p3 and doing ene=sqrt(p1^2+p2^2+p3^2)-1 instead. Please make sure p1, p2, p3 are read before this!')
-            self._raw_ene = np.sqrt(np.square(self._raw_p1)+np.square(self._raw_p2)+np.square(self._raw_p3))-1.
 
 ################################method read_raw_x1################################
     def read_raw_x1(self):
@@ -275,37 +271,144 @@ class OutFile:
         self._raw_p3 = np.zeros(self.fileid['p3'].shape, dtype=float_type)
         self.fileid['p3'].read_direct(self._raw_p3)
 
+################################method read_raw_ene################################
+    def read_raw_ene(self, ene_key_warning=True):
+        try:
+            self._raw_ene = np.zeros(self.fileid['ene'].shape, dtype=float_type)
+            self.fileid['ene'].read_direct(self._raw_ene)
+        except KeyError:
+            if ene_key_warning:
+            #by default, if 'ene' key does not exist, print the following warning message.
+            #but one can explicitly silence this message by setting ene_key_warning=False
+                print('Warning! Key \'ene\' does not exist in particle raw data! Reading p1, p2, p3 and doing ene=sqrt(p1^2+p2^2+p3^2)-1 instead. Please make sure p1, p2, p3 are read before this!')
+            self._raw_ene = np.sqrt(np.square(self._raw_p1)+np.square(self._raw_p2)+np.square(self._raw_p3))-1.
+
+################################method select_raw_data################################
+# Select particles according to the raw data
+# x1_low, x1_up: lower and upper limits of x1.
+# ...
+# r_low, r_up: lower and upper limits of radius of position, i.e. sqrt(x2^2+x3^2).
+# sample_size: select a random sample of size sample_size from selected macro particles according to the former conditions. sample_size overrides sample_rate.
+# sample_rate: a number between 0 and 1. sample_size = int(sample_rate * number of remaining particles from former range selections). If sample_size is not None, this parameter is ignored.
+# set self._raw_select_index with the selection index array, and also return this array.
+    def select_raw_data(self, x1_low=None, x1_up=None, x2_low=None, x2_up=None, x3_low=None, x3_up=None, p1_low=None, p1_up=None, p2_low=None, p2_up=None, p3_low=None, p3_up=None, ene_low=None, ene_up=None, r_low=None, r_up=None, sample_size=None, sample_rate=None):
+        #get number of particles
+        try: n_part = self._raw_tag.size // 2
+        except AttributeError:
+            try: n_part = self._raw_q.size
+            except AttributeError:
+                try: n_part = self._raw_x1.size
+                except AttributeError:
+                    try: n_part = self._raw_p1.size
+                    except AttributeError:
+                        try: n_part = self._raw_x2.size
+                        except AttributeError:
+                            try: n_part = self._raw_p2.size
+                            except AttributeError:
+                                try: n_part = self._raw_x3.size
+                                except AttributeError:
+                                    try: n_part = self._raw_p3.size
+                                    except AttributeError:
+                                        n_part = self._raw_ene.size
+        #select_list is a boolean list, if one of its element is True, the corresponding macro particle is selected
+        select_list = np.full(n_part, True, dtype=bool)
+        if x1_low is not None:
+            select_list = self._raw_x1 > x1_low
+        if x1_up is not None:
+            select_list = (self._raw_x1 < x1_up) & (select_list)
+        if x2_low is not None:
+            select_list = (self._raw_x2 > x2_low) & (select_list)
+        if x2_up is not None:
+            select_list = (self._raw_x2 < x2_up) & (select_list)
+        if x3_low is not None:
+            select_list = (self._raw_x3 > x3_low) & (select_list)
+        if x3_up is not None:
+            select_list = (self._raw_x3 < x3_up) & (select_list)
+        if r_low is not None:
+            r_square = np.square(self._raw_x1)+np.square(self._raw_x2)
+            select_list = (r_square > (r_low*r_low)) & (select_list)
+        if r_up is not None:
+            try: r_square
+            except KeyError: r_square = np.square(self._raw_x1)+np.square(self._raw_x2)
+            select_list = (r_square < (r_up*r_up)) & (select_list)
+
+        if p1_low is not None:
+            select_list = (self._raw_p1 > p1_low) & (select_list)
+        if p1_up is not None:
+            select_list = (self._raw_p1 < p1_up) & (select_list)
+        if p2_low is not None:
+            select_list = (self._raw_p2 > p2_low) & (select_list)
+        if p2_up is not None:
+            select_list = (self._raw_p2 < p2_up) & (select_list)
+        if p3_low is not None:
+            select_list = (self._raw_p3 > p3_low) & (select_list)
+        if p3_up is not None:
+            select_list = (self._raw_p3 < p3_up) & (select_list)
+
+        if ene_low is not None:
+            select_list = (self._raw_ene > ene_low) & (select_list)
+        if ene_up is not None:
+            select_list = (self._raw_ene < ene_up) & (select_list)
+
+        #debug: for predictable samples
+        np.random.seed(0)
+        #select_index_array is an array containing the index of selected macro particles
+        #np.nonzero() returns a tuple.
+        select_index_array = np.nonzero(select_list)[0]
+        if sample_rate is not None:
+            if sample_size is None: sample_size = int(np.size(select_index_array) * sample_rate)
+        if sample_size is not None:
+            select_index_array = np.random.choice(select_index_array, sample_size, replace=False)
+        self._raw_select_index = select_index_array
+        return select_index_array
+
 ################################method calculate_q_pC################################
 # calculate the charge in unit of pico-coulumb
 # please call read_raw_q() before this function
-    def calculate_q_pC(self, n0_per_cc):
+# if_select = False: use all the macro particles
+# if_select = True: only use the macro particles with index in self._raw_select_index
+    def calculate_q_pC(self, n0_per_cc, if_select = False):
         '''
         n0_per_cc: reference density in simulation, in unit of per centimeter cube
         one_over_k0_um: one over k0, in unit of micrometer
         one_over_k0_um = (3.541e-20*n0_per_cc)^-0.5
+        when if_select = True, only calculate the selected macro particles according to self._raw_select_index.
         '''
+        if if_select and (self._raw_select_index is not None):
+            if 0==len(self._raw_select_index):
+                print("Warning: no particle is selected! Charge is set to 0.")
+                return 0.0
+            q_array = self._raw_q[self._raw_select_index]
+        else: q_array = self._raw_q
         #normalized cell volume
         cell_volume_norm = 1.0
         for i in range(self.num_dimensions):
             cell_volume_norm = cell_volume_norm*self._cell_size[i]
         if 3>self.num_dimensions:
             print('Warning! Similation is in {} dimensional. Charge calculation may not be correct.'.format(self.num_dimensions))
-        return np.sum(self._raw_q)*e_charge*cell_volume_norm/np.sqrt(n0_per_cc)*1.5e29
+        return np.sum(q_array)*e_charge*cell_volume_norm/np.sqrt(n0_per_cc)*1.5e29
 
 ################################method calculate_norm_rms_emittance_um################################
 # calculate the normalized rms emittance in unit of micrometer radian
 # please call read_raw_x2(), read_raw_p2() and/or read_raw_x3(), read_raw_p3()
 # and/or read_raw_x1(), read_raw_p1()
 # and read_raw_q() before this function
-    def calculate_norm_rms_emittance_um(self, n0_per_cc, directions=(2,)):
+    def calculate_norm_rms_emittance_um(self, n0_per_cc, directions=(2,), if_select = False):
         '''
         n0_per_cc: reference density in simulation, in unit of per centimeter cube
         one_over_k0_um: one over k0, in unit of micrometer
         one_over_k0_um = (3.541e-20*n0_per_cc)^-0.5
+        when if_select = True, only calculate the selected macro particles according to self._raw_select_index.
         '''
         one_over_k0_um = (3.541e-20*n0_per_cc)**-0.5
         emittances=np.zeros(len(directions))
-        weights=np.absolute(self._raw_q)
+        if if_select and (self._raw_select_index is not None):
+            if 0==len(self._raw_select_index):
+                print("Warning: no particle is selected! Emittance is set to 0.")
+                return emittances
+            weights = self._raw_q[self._raw_select_index]
+        else: weights = self._raw_q
+        weights=np.absolute(weights)
         sum_weight=np.sum(weights)
         for i in range(len(directions)):
             if 3==directions[i]:
@@ -317,11 +420,39 @@ class OutFile:
             else:
                 x=self._raw_x2
                 p=self._raw_p2
+            if if_select and (self._raw_select_index is not None):
+                x = x[self._raw_select_index]
+                p = p[self._raw_select_index]
             term1=np.sum(np.multiply(np.square(x), weights))/sum_weight
             term2=np.sum(np.multiply(np.square(p), weights))/sum_weight
             term3=np.sum(np.multiply(np.multiply(x, p), weights))/sum_weight
             emittances[i]=np.sqrt(term1*term2-term3*term3)*one_over_k0_um
         return emittances
+
+################################method save_tag_file################################
+# Save tage file for particle tracking
+# in a tag file of OSIRIS, the ! symble is for comment;
+# the first uncommented line is the number of tracked particles;
+# the following lines are index of the tracked particles.
+# Each particle has two index: the first is the process index (where it is born)
+# the second is the particle index in this process.
+# User has to make sure that the raw data has been read before calling this.
+    def save_tag_file(self, tag_file_name="particles.tags", path=None, if_select = False):
+        if path is None:
+            path = self.path
+        if if_select and (self._raw_select_index is not None):
+            if 0==len(self._raw_select_index):
+                print("Warning: no particle is selected! Return without saving a tag file.")
+                return 1
+            tag_array = self._raw_tag[self._raw_select_index]
+        else: tag_array = self._raw_tag
+        with open("{}/{}".format(path, tag_file_name),'w',encoding = 'utf-8') as h_file:
+        #h_file.close() is guaranteed
+            n_particles = tag_array.shape[0]
+            h_file.write("{}\n".format(n_particles))
+            for i in range(n_particles):
+                h_file.write("{}, {}\n".format(tag_array[i,0], tag_array[i,1]))
+        return 0
 
 ################################method read_data################################
     def read_data(self):
@@ -334,7 +465,7 @@ class OutFile:
         else:
             self._axis_labels = [self._axis_labels_original[i] for i in range(self._num_dimensions)]
             self._axis_units = [self._axis_units_original[i] for i in range(self._num_dimensions)]
-        self._fig_title = 't = {0:.2f}'.format(self.fileid.attrs['TIME'][0])
+        self._fig_title = 't = {0:.2f}'.format(self.time)
 
 ################################method read_data_slice################################
     def read_data_slice(self, dir = 2, pos = None):
@@ -378,7 +509,7 @@ class OutFile:
         self._axis_slices = [slice(self._axis_range[0, i], self._axis_range[1, i], self._cell_size[i]) for i in range(3) if i!=dir]#this can be simplified to self._axis_slices = [self._axis_slices[i] for i in range(3) if i!=dir] but bug test is required
         self._axis_labels = [self._axis_labels_original[i] for i in range(self._num_dimensions) if i!=dir]
         self._axis_units = [self._axis_units_original[i] for i in range(self._num_dimensions) if i!=dir]
-        self._fig_title = 't = {0:.2f}, slice at {1} = {2}'.format(self.fileid.attrs['TIME'][0], self._axis_labels_original[dir], pos)
+        self._fig_title = 't = {0:.2f}, slice at {1} = {2}'.format(self.time, self._axis_labels_original[dir], pos)
 
 ################################method read_data_project################################
     def read_data_project(self, *args, **kwargs):
@@ -398,7 +529,7 @@ class OutFile:
         self._axis_slices = [self._axis_slices[i] for i in range(3) if i!=dir]
         self._axis_labels = [self._axis_labels_original[i] for i in range(self._num_dimensions) if i!=dir]
         self._axis_units = [self._axis_units_original[i] for i in range(self._num_dimensions) if i!=dir]
-        self._fig_title = 't = {0:.2f}, project {1}along {2} direction'.format(self.fileid.attrs['TIME'][0], 'absolute value ' if if_abs else '', self._axis_labels_original[dir])
+        self._fig_title = 't = {0:.2f}, project {1}along {2} direction'.format(self.time, 'absolute value ' if if_abs else '', self._axis_labels_original[dir])
 
 ################################method data_project2d################################
     def data_project2d(self, dir = 0, if_abs = False):
@@ -411,7 +542,7 @@ class OutFile:
         self._axis_slices = [self._axis_slices[1-dir]]
         self._axis_labels = [self._axis_labels_original[1-dir]]
         self._axis_units = [self._axis_units_original[1-dir]]
-        self._fig_title = 't = {0:.2f}, project {1}along {2} direction'.format(self.fileid.attrs['TIME'][0], 'absolute value ' if if_abs else '', self._axis_labels_original[dir])
+        self._fig_title = 't = {0:.2f}, project {1}along {2} direction'.format(self.time, 'absolute value ' if if_abs else '', self._axis_labels_original[dir])
 
 ################################method read_data_lineout################################
     def read_data_lineout(self, dir = 0, pos =(0., 0.)):
@@ -443,7 +574,7 @@ class OutFile:
         self._axis_units = [self._axis_units_original[dir],]
         tmp_list = [self._axis_labels_original[i] for i in range(self._num_dimensions) if i!=dir]
         tmp_list = ['{0} = {1}'.format(tmp_list[i], pos[i]) for i in range(self._num_dimensions-1)]
-        self._fig_title = 't = {0:.2f}, lineout at '.format(self.fileid.attrs['TIME'][0]) + ', '.join(tmp_list)
+        self._fig_title = 't = {0:.2f}, lineout at '.format(self.time) + ', '.join(tmp_list)
 
 ################################method data_FFT1d################################
     def data_FFT1d(self):
@@ -468,7 +599,7 @@ class OutFile:
         self._axis_slices=[slice(t[0]+self._axis_slices[0].start, t[-1]+t[1]-t[0]+self._axis_slices[0].start, t[1]-t[0]), slice(2*pi * f[0], 2*pi * (f[-1]+f[1]-f[0]), 2*pi * (f[1]-f[0]))]
         self._axis_labels = [self._axis_labels_original[0], 'k']
         self._axis_units = [self._axis_units_original[0], '$k_p$']
-        self._fig_title = 't = {0:.2f}, spectrogram'.format(self.fileid.attrs['TIME'][0])
+        self._fig_title = 't = {0:.2f}, spectrogram'.format(self.time)
         #print(self._axis_slices)
         #print('t={0}:{1}:{2}'.format(t[0],t[-1]+t[1]-t[0],t[1]-t[0]))
         #print(type(Sxx))
@@ -555,31 +686,90 @@ class OutFile:
         return h_fig, h_ax, bin_edges, hist
 
 ################################method plot_raw_hist_gamma################################
-    def raw_hist_gamma(self, num_bins=256, range_max=None, range_min=None):
+    def raw_hist_gamma(self, num_bins=256, range_max=None, range_min=None, if_select = False):
         '''Get histogram from ene raw data +1 = gamma.'''
-        if range_max is None:
-            range_max = self._raw_ene.max()+1.
-        if range_min is None:
-            range_min = self._raw_ene.min()+1.
         weights=np.absolute(self._raw_q)
-        hist, bin_edges = np.histogram(self._raw_ene+1., num_bins, (range_min, range_max), weights=weights)
+        gamma = self._raw_ene+1.
+        if if_select and (self._raw_select_index is not None):
+            weights = weights[self._raw_select_index]
+            gamma = gamma[self._raw_select_index]
+        if range_max is None:
+            range_max = gamma.max()
+        if range_min is None:
+            range_min = gamma.min()
+        hist, bin_edges = np.histogram(gamma, num_bins, (range_min, range_max), weights=weights)
         bin_edges = bin_edges[0:-1]
-        gamma_ave = (np.average(self._raw_ene+1., weights=weights))
-        return bin_edges, hist, gamma_ave
+        return bin_edges, hist
 
 ################################method plot_raw_hist_gamma################################
-    def plot_raw_hist_gamma(self, h_fig=None, h_ax=None, num_bins=256, range_max=None, range_min=None):
+    def plot_raw_hist_gamma(self, h_fig=None, h_ax=None, num_bins=256, range_max=None, range_min=None, if_select = False):
         '''Plot histogram from ene raw data +1 = gamma.'''
         if h_fig is None:
             h_fig = plt.figure()
         if h_ax is None:
             h_ax = h_fig.add_subplot(111)
-        bin_edges, hist, gamma_ave = self.raw_hist_gamma(num_bins, range_max, range_min)
+        bin_edges, hist = self.raw_hist_gamma(num_bins, range_max, range_min, if_select = if_select)
         h_ax.plot(bin_edges, hist)
         h_ax.set_xlabel('$\\gamma$')
         h_ax.set_ylabel('Counts [arbt. units]')
-        h_ax.set_title('$\\gamma$ histogram. $\\gamma$ average = {0:.2f}'.format(gamma_ave))
+        h_ax.set_title('$t = {0:.2f}$'.format(self.time))
         return h_fig, h_ax, bin_edges, hist
+
+################################method plot_raw_hist2D################################
+    def plot_raw_hist2D(self, h_fig=None, h_ax=None, dim=1, num_bins=128, range=None, cmap=None, if_select = False, if_colorbar=True, colorbar_orientation="vertical", if_log_colorbar=False):
+        '''Plot 2D histogram for phasespace from raw data.
+           Please make sure the corresponding raw data is read before calling this.
+           dim=0: p1x1
+           dim=1: p2x2
+           dim=2: p3x3
+           dim=3: x1x2'''
+        if h_fig is None:
+            h_fig = plt.figure()
+        if h_ax is None:
+            h_ax = h_fig.add_subplot(111)
+        weights=np.absolute(self._raw_q)
+        if 0==dim:
+            x=self._raw_x1
+            y=self._raw_p1
+            xlabel='$k_p z$'
+            ylabel='$p_z/m_e c$'
+        elif 1==dim:
+            x=self._raw_x2
+            y=self._raw_p2
+            xlabel='$k_p x$'
+            ylabel='$p_x/m_e c$'
+        elif 2==dim:
+            x=self._raw_x3
+            y=self._raw_p3
+            xlabel='$k_p y$'
+            ylabel='$p_y/m_e c$'
+        elif 3==dim:
+            x=self._raw_x1
+            y=self._raw_x2
+            xlabel='$k_p z$'
+            ylabel='$k_p x$'
+        elif 4==dim:
+            x=self._raw_x1
+            y=self._raw_x3
+            xlabel='$k_p z$'
+            ylabel='$k_p y$'
+        if if_select and (self._raw_select_index is not None):
+            weights = weights[self._raw_select_index]
+            x = x[self._raw_select_index]
+            y = y[self._raw_select_index]
+        H, xedges, yedges = np.histogram2d(x, y, bins=num_bins, range=range, weights=weights)
+        H=np.transpose(H)
+        if if_log_colorbar:
+            h_plot = h_ax.pcolormesh(xedges[0:-1], yedges[0:-1], H, norm=LogNorm(), cmap=cmap, antialiased=True)
+        else:
+            h_plot = h_ax.pcolormesh(xedges[0:-1], yedges[0:-1], H, cmap=cmap, antialiased=True)
+        h_ax.set_xlabel(xlabel)
+        h_ax.set_ylabel(ylabel)
+        if if_colorbar:
+            self._color_bar = plt.colorbar(h_plot, ax=h_ax, orientation=colorbar_orientation)
+            self._color_bar.set_label('Counts [arb. units]')
+        h_ax.set_title('$t = {0:.2f}$'.format(self.time))
+        return h_fig, h_ax, H, xedges, yedges
 
 ################################method plot_data################################
     def plot_data(self, *args, **kwargs):
@@ -703,78 +893,34 @@ class OutFile:
 #not completed
 
 if __name__ == '__main__':
-    out_num=0
+    out_num=80
     def tmp_3D():
         h_fig = plt.figure(figsize=(10,8))
-        file1 = OutFile(code_name='hipace',path='/home/zming/simulations/os2D/Hi_test',field_name='charge',average='',spec_name='beam',out_num=out_num)
+        file1 = OutFile(code_name='osiris',path='/home/zming/mnt/os_PT3D18',field_name='charge',average='',spec_name='Ne_eK',out_num=out_num)
         h_ax = h_fig.add_subplot(221)
         file1.open()
         file1.read_data_slice(dir=1)
         file1.plot_data(h_fig, h_ax, vmax=0., vmin=-1.)
-        file1.close()
-        file1.spec_name='plasma'
         h_ax = h_fig.add_subplot(222)
-        file1.open()
         file1.read_data_slice(dir=2)
-        file1.plot_data(h_fig, h_ax)#, vmax=5., vmin=-5.)
+        file1.plot_data(h_fig, h_ax, vmax=0., vmin=-1.)
         file1.close()
-
-        '''file1.field_name='raw'
-        file1.spec_name='driver'
-        file1.open()
-        file1.read_raw_q()
-        print('driver charge = {} pC'.format(file1.calculate_q_pC(4.9e16, 10./256, 8./256, 8./256)))
-        file1.read_raw_p1()
-        file1.read_raw_p2()
-        file1.read_raw_p3()
-        file1.read_raw_ene()
+        file1.field_name='p1x1'
+        #file1.spec_name='O_eK'
         h_ax = h_fig.add_subplot(223)
-        file1.plot_raw_hist_gamma(h_fig, h_ax)
+        file1.open()
+        file1.read_data()
+        file1.plot_data(h_fig, h_ax, if_log_colorbar=True)#, vmax=5., vmin=-5.)
         file1.close()
 
         file1.field_name='raw'
-        file1.spec_name='trailer'
+        #file1.spec_name='O_eK'
         file1.open()
-        file1.read_raw_q()
-        print('trailer charge = {}'.format(file1.calculate_q_pC(4.9e16, 10./256, 8./256, 8./256)))
+        file1.read_raw_x1()
         file1.read_raw_p1()
-        file1.read_raw_p2()
-        file1.read_raw_p3()
-        file1.read_raw_ene()
+        file1.close()
         h_ax = h_fig.add_subplot(224)
-        file1.plot_raw_hist_gamma(h_fig, h_ax)
-        file1.close()
-        plt.tight_layout()
-        plt.show()
-    def tmp_2D():
-        h_fig = plt.figure(figsize=(16.5,11))
-        file1 = OutFile(path='/home/zming/simulations/os2D/os_res2D81',field_name='charge',spec_name='e_He',out_num=out_num)
-        h_ax = h_fig.add_subplot(221)
-        file1.open()
-        file1.read_data()
-        file1.plot_data(h_fig, h_ax)#, if_log_colorbar=True)
-        file1.close()
-        h_ax = h_fig.add_subplot(222)
-        file1.spec_name='e_He'
-        #file1.field_name='p1x1'
-        file1.open()
-        file1.read_data()
-        file1.plot_data(h_fig, h_ax)#, if_log_colorbar=True)#, vmax=1.)
-        file1.close()
-        h_ax = h_fig.add_subplot(223)
-        file1.field_name = 'e1'
-        file1.open()
-        file1.read_data()
-        file1.plot_data(h_fig, h_ax)#, vmax=3., vmin=-3.)
-        file1.close()'''
-        '''
-        h_ax = h_fig.add_subplot(224)
-        file1.field_name = 'psi'
-        file1.open()
-        file1.read_data()
-        print('Delta psi = {0}'.format(file1._data.max()-file1._data.min()))
-        file1.plot_data(h_fig, h_ax)#, vmax=5., vmin=-1.)
-        file1.close()'''
+        h_ax.scatter(file1._raw_x1, file1._raw_p1, s=1, marker='.')
         plt.show()
     def cyl_m_2D():
         h_fig = plt.figure(figsize=(16.5,11))
@@ -805,54 +951,37 @@ if __name__ == '__main__':
         print(file1._W)
         file1.close()
         plt.show()
-    def tmp_1D():
-        file1 = OutFile(path='/home/zming/simulations/os2D/os_laser1D5',field_name='e3',spec_name='e',out_num=out_num)
+    def tmp_hipace3D():
+        file1 = OutFile(code_name='hipace', path='/home/zming/simulations/os2D/hi_beam3D105',field_name='raw',spec_name='trailer',out_num=990)
         file1.open()
-        file1.read_data()
+        file1.read_raw_x1()
+        file1.read_raw_p1()
+        file1.close()
         h_fig = plt.figure()
-        h_ax = h_fig.add_subplot(311)
-        file1.plot_data(h_fig, h_ax)
-        #plt.show(block=True)
-        file1.data_STFT()
-        h_ax = h_fig.add_subplot(312)
-        file1.plot_data(h_fig, h_ax, if_log_colorbar=True)
-        file1.close()
-        file1.field_name = 'e1'
-        file1.open()
-        file1.read_data()
-        h_ax = h_fig.add_subplot(313)
-        file1.plot_data(h_fig, h_ax)
-        file1.close()
-        plt.show(block=True)
-    def test():
-        semilogy=True
-        h_fig = plt.figure(figsize=(10,8))
-        file1 = OutFile(path='/home/zming/simulations/os2D/os_PT3D3',field_name='e3',average='-savg',spec_name='plasma',out_num=out_num)
         h_ax = h_fig.add_subplot(111)
+        h_ax.scatter(file1._raw_x1, file1._raw_p1, s=1, marker='.')
+        plt.show(block=True)
+    def tmp_beam3D():
+        file1 = OutFile(code_name='osiris', path='/home/zming/mnt/os_beam3D122',field_name='psi',out_num=16)
         file1.open()
+        file1.read_data_slice()
+        h_fid, h_ax=file1.plot_data()
         file1.read_data_lineout()
-        file1.data_FFT1d()
-        file1.plot_data(h_fig, h_ax, semilogy=semilogy, linestyle='k-')
+        file1.plot_data(h_fid, h_ax)
         file1.close()
-        file1.out_num=10
-        file1.open()
-        file1.read_data_lineout()
-        file1.data_FFT1d()
-        file1.plot_data(h_fig, h_ax, semilogy=semilogy, linestyle='r-')
-        file1.close()
-        file1.out_num=20
-        file1.open()
-        file1.read_data_lineout()
-        file1.data_FFT1d()
-        file1.plot_data(h_fig, h_ax, semilogy=semilogy, linestyle='b-')
-        file1.close()
-        plt.tight_layout()
         plt.show()
+    def test():
+        file1 = OutFile(code_name='osiris',path='/home/zming/mnt/os_PT3D11',field_name='raw',average='',spec_name='e',out_num=20)
+        file1.open()
+        file1.read_raw_q()
+        file1.read_raw_x2()
+        file1.read_raw_x3()
+        file1.read_raw_p2()
+        file1.read_raw_p3()
+        file1.select_raw_data(sample_rate=0.01)
+        print(file1.calculate_norm_rms_emittance_um(n0_per_cc=6.222e17, directions=(2,3), if_select = True))
         
     #test()
-    #for out_num in range(43,88):
-    #    tmp_3D()
-    #    plt.savefig('/home/zming/simulations/os2D/os_PT3D4/plots/{}.png'.format(out_num))
-    #    plt.close()
-    #cyl_m_2D()
-    tmp_3D()
+    #tmp_hipace3D()
+    tmp_beam3D()
+    #tmp_3D()
