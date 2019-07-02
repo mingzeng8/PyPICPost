@@ -771,6 +771,20 @@ class OutFile:
         h_ax.set_title('$t = {0:.2f}$'.format(self.time))
         return h_fig, h_ax, H, xedges, yedges
 
+################################method raw_mean_rms_ene################################
+    def raw_mean_rms_ene(self, if_select = False):
+        '''Return weighted mean value and RMS spread of ene.
+           If if_select and self._raw_select_index is not None, use selection of macroparticles.
+           Otherwise use all the macroparticles.'''
+        weights=np.absolute(self._raw_q)
+        ene = self._raw_ene
+        if if_select and (self._raw_select_index is not None):
+            weights = weights[self._raw_select_index]
+            ene = ene[self._raw_select_index]
+        ene_avg, sum_weights = np.average(ene, weights=weights, returned=True)
+        ene_rms_spread = np.sqrt(np.sum(np.square(ene-ene_avg)*weights)/sum_weights)
+        return ene_avg, ene_rms_spread
+
 ################################method plot_data################################
     def plot_data(self, *args, **kwargs):
         '''Automatically detect the dimension of data and choose the proper plot method'''
