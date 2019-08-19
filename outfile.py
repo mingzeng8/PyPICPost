@@ -6,21 +6,23 @@ from scipy import signal, pi
 from scipy import e as const_e
 from scipy.constants import e as e_charge
 from matplotlib.colors import LogNorm
+from glob import glob
+import parse
+import os
 
 float_type=np.float64
 
 class OutFile:
-    def __init__(self, code_name = 'osiris', path = '.', out_type = None, field_name = 'e3', spec_name = '', out_num = 0, average='', cyl_m_num = 0, cyl_m_re_im='re'):
+    def __init__(self, code_name = 'osiris', path = '.', out_type = None, field_name = 'e3', spec_name = '', use_num_list = False, out_num = 0, average='', cyl_m_num = 0, cyl_m_re_im='re'):
 ##value digit_num##
         self._accepted_code_name = {'osiris', 'hipace'}
         self.digit_num = 6
         self.code_name = code_name
         self.path = path
         self.spec_name = spec_name
-        self._field_name_to_out_type = {'psi':'FLD', 'e1':'FLD', 'e2':'FLD', 'e3':'FLD', 'e3_cyl_m':'FLD_CYL_M', 'b1':'FLD', 'b2':'FLD', 'b3':'FLD', 'j1':'DENSITY', 'ene':'DENSITY', 'charge':'DENSITY', 'ion_charge':'ION', 'p1x1':'PHA', 'p2x2':'PHA', 'raw':'RAW', 'ExmBy':'FLD', 'Ez':'FLD', 'EypBx':'FLD'}
+        self._field_name_to_out_type = {'psi':'FLD', 'e1':'FLD', 'e2':'FLD', 'e3':'FLD', 'e3_cyl_m':'FLD_CYL_M', 'b1':'FLD', 'b2':'FLD', 'b3':'FLD', 'j1':'DENSITY', 'ene':'DENSITY', 'charge':'DENSITY', 'ion_charge':'ION', 'p1x1':'PHA', 'p2x2':'PHA', 'raw':'RAW', 'ExmBy':'FLD', 'Ez':'FLD', 'EypBx':'FLD', 'tracks':'TRACKS'}
         #self.out_type = out_type
         self.field_name = field_name
-        self.out_num = out_num
         self.average = average
         #2D cylindrical modes for fields
         self.cyl_m_num = cyl_m_num
@@ -30,8 +32,13 @@ class OutFile:
         self._axis_labels_original = ('z', 'x', 'y', '$p_z$', '$p_x$', '$p_y$')
         self._axis_units_original = ('$c / \\omega_p$',)*3 + ('$m_ec$',)*3
         #self._axis_units_original = ('$k_p^{-1}$',)*3 + ('$m_ec$',)*3
-        self._field_names = {'psi':'$\psi$', 'e1':'$E_z$', 'e2':'$E_x$', 'e3':'$E_y$', 'e3_cyl_m':'$E_y$', 'b1':'$B_z$', 'b2':'$B_x$', 'b3':'$B_y$', 'j1':'$J_z$', 'ene':'$E_k / n_p m_e c^2$', 'charge':'$\\rho$', 'ion_charge':'$\\rho$', 'p1x1':'$p_1x_1$ [arb. units]', 'p2x2':'$p_2x_2$ [arb. units]', 'beam_charge':'$\\rho_b$', 'plasma_charge':'$\\rho_e$', 'ExmBy':'$E_x-B_y$', 'Ez':'$E_z$', 'EypBx':'$E_y+B_x$'}
+        self._field_names = {'psi':'$\psi$', 'e1':'$E_z$', 'e2':'$E_x$', 'e3':'$E_y$', 'e3_cyl_m':'$E_y$', 'b1':'$B_z$', 'b2':'$B_x$', 'b3':'$B_y$', 'j1':'$J_z$', 'ene':'$E_k / n_p m_e c^2$', 'charge':'$\\rho$', 'ion_charge':'$\\rho$', 'p1x1':'$p_1x_1$ [arb. units]', 'p2x2':'$p_2x_2$ [arb. units]', 'beam_charge':'$\\rho_b$', 'plasma_charge':'$\\rho_e$', 'ExmBy':'$E_x-B_y$', 'Ez':'$E_z$', 'EypBx':'$E_y+B_x$'\
+        # Some field naming problem in new HiPACE
+        , 'plasma_electrons': '$\\rho_e$', 'driver': '$\\rho_d$', 'trailer': '$\\rho_t$'}
         self._accepted_out_type = {'DENSITY', 'FLD', 'FLD_CYL_M', 'ION', 'PHA', 'RAW'}
+        # if use_num_list = True, the actual out_num used is self._avail_num_list[out_num]
+        self.use_num_list = use_num_list
+        self.out_num = out_num
             
 
 ################################property code_name################################
@@ -91,19 +98,47 @@ class OutFile:
 
     spec_name = property(get_spec_name, set_spec_name)
 
+################################property num_of_zeros################################
+    def get_num_of_zeros(self):
+        return self._num_of_zeros
+
+    def set_num_of_zeros(self, **kwargs):
+        raise RuntimeError('Please do not set num_of_zeros directly!. It will be automatically set when setting out_num.')
+    num_of_zeros = property(get_num_of_zeros, set_num_of_zeros)
+
+################################property use_num_list################################
+    def get_use_num_list(self):
+        return self._use_num_list
+
+    def set_use_num_list(self, value):
+        if isinstance(value, bool):
+            self._use_num_list = value
+            if value: self.reset_avail_num_list()
+            else: pass #maybe del self._avail_num_list is better
+        else: raise TypeError("set_use_num_list should recieve a boolean type!")
+
+    use_num_list = property(get_use_num_list, set_use_num_list)
+
 ################################property out_num################################
     def get_out_num(self):
         return self._out_num
 
     def set_out_num(self, value):
-        if value not in range(int(10**self.digit_num)):
-            raise ValueError('out_num \'{0}\' not in range!'.format(value))
+        if self.use_num_list:
+            #try: self._avail_num_list
+            #except: self.reset_avail_num_list()
+            if value not in range(len(self._avail_num_list)): raise KeyError('Using num_list. out_num = {}, not in range({})!'.format(value, len(self._avail_num_list)))
+            self.actual_num = self._avail_num_list[value]
+        else:
+            if value not in range(int(10**self.digit_num)):
+                raise ValueError('out_num \'{0}\' not in range!'.format(value))
+            self.actual_num = value
         self._out_num = value
 ##value num_of_zeros##
-        if 0 == value:
-            self.num_of_zeros = self.digit_num - 1
+        if 0 == self.actual_num:
+            self._num_of_zeros = self.digit_num - 1
         else:
-            self.num_of_zeros = self.digit_num - 1 - int(np.log10(value))
+            self._num_of_zeros = self.digit_num - 1 - int(np.log10(self.actual_num))
 
     out_num = property(get_out_num, set_out_num)
 
@@ -118,28 +153,62 @@ class OutFile:
 
     average = property(get_average, set_average)
 
+################################ prefix_filename ################################
+    def get_prefix_filename(self):
+        self.reset_prefix_filename()
+        return self._prefix_filename
+
+    def reset_prefix_filename(self):
+        if 'osiris' == self.code_name:
+            main_folder_path = '{}/MS/{}'.format(self.path, self.out_type)
+            if 'DENSITY' == self._out_type:
+                self._prefix_filename = '{0}/{1}/{2}{3}/{2}{3}-{1}-'.format(main_folder_path, self.spec_name, self.field_name, self.average)
+            elif 'ION' == self._out_type:
+                self._prefix_filename = '{0}/{1}/{2}/{2}-{1}-'.format(main_folder_path, self.spec_name, self.field_name)
+            elif 'FLD' == self._out_type:
+                self._prefix_filename = '{0}/{1}{2}/{1}{2}-'.format(main_folder_path, self.field_name, self.average)
+            elif 'FLD_CYL_M' == self._out_type:
+                self._prefix_filename = '{0}/MODE-{1}-{2}/{3}/{3}-{1}-{4}-'.format(main_folder_path, self.cyl_m_num, self.cyl_m_re_im.upper(), self.field_name, self.cyl_m_re_im.lower())
+            elif 'PHA' == self._out_type:
+                self._prefix_filename = '{0}/{1}/{2}/{1}-{2}-'.format(main_folder_path, self.field_name, self.spec_name)
+            elif 'RAW' == self._out_type:
+                self._prefix_filename = '{0}/{1}/RAW-{1}-'.format(main_folder_path, self.spec_name)
+            elif 'TRACKS' == self._out_type:
+                self._prefix_filenamex = '{0}/{1}-tracks.h5'.format(main_folder_path, self.spec_name)
+        elif 'hipace' == self.code_name:
+            main_folder_path = '{}/DATA'.format(self.path)
+            if 'DENSITY' == self._out_type:
+                #self._prefix_filename = '{0}/density_{1}_{2}_'.format(main_folder_path, self.spec_name, self.field_name)
+                # Changed according to new HiPACE
+                self._prefix_filename = '{0}/density_{1}_'.format(main_folder_path, self.spec_name)
+            elif 'FLD' == self._out_type:
+                self._prefix_filename = '{0}/field_{1}_'.format(main_folder_path, self.field_name)
+            elif 'RAW' == self._out_type:
+                self._prefix_filename = '{0}/raw_{1}_'.format(main_folder_path, self.spec_name)
+        else:
+            raise NotImplementedError('Code name {} not implemented!'.format(self.code_name))
+
+################################ avail_num_list ################################
+# obtain the number list from the simulation output folder
+    def get_avail_num_list(self):
+        self.reset_avail_num_list()
+        return self._avail_num_list
+
+    def reset_avail_num_list(self):
+        self.reset_prefix_filename()
+        format_string=self._prefix_filename+'{}.h5'
+        file_list = glob(format_string.format('*'))
+        try: num_list=[int(parse.parse(format_string, file_list[i])[0]) for i in range(len(file_list))]
+        except ValueError: num_list=[float(parse.parse(format_string, file_list[i])[0]) for i in range(len(file_list))]
+        num_list.sort()
+        self._avail_num_list = num_list
+
 ################################property path_filename################################
     def get_path_filename(self):
-        if 'osiris' == self.code_name:
-            if 'DENSITY' == self._out_type:
-                return '{0}/MS/DENSITY/{2}/{1}{5}/{1}{5}-{2}-{3}{4}.h5'.format(self.path, self.field_name, self.spec_name, '0'*self.num_of_zeros, self.out_num, self.average)
-            elif 'ION' == self._out_type:
-                return '{0}/MS/ION/{2}/{1}/{1}-{2}-{3}{4}.h5'.format(self.path, self.field_name, self.spec_name, '0'*self.num_of_zeros, self.out_num)
-            elif 'FLD' == self._out_type:
-                return '{0}/MS/FLD/{1}{4}/{1}{4}-{2}{3}.h5'.format(self.path, self.field_name, '0'*self.num_of_zeros, self.out_num, self.average)
-            elif 'FLD_CYL_M' == self._out_type:
-                return '{0}/MS/FLD/MODE-{1}-{2}/{3}/{3}-{1}-{4}-{5}{6}.h5'.format(self.path, self.cyl_m_num, self.cyl_m_re_im.upper(), self.field_name, self.cyl_m_re_im.lower(), '0'*self.num_of_zeros, self.out_num)
-            elif 'PHA' == self._out_type:
-                return '{0}/MS/PHA/{1}/{2}/{1}-{2}-{3}{4}.h5'.format(self.path, self.field_name, self.spec_name, '0'*self.num_of_zeros, self.out_num)
-            elif 'RAW' == self._out_type:
-                return '{0}/MS/RAW/{1}/RAW-{1}-{2}{3}.h5'.format(self.path, self.spec_name, '0'*self.num_of_zeros, self.out_num)
-        elif 'hipace' == self.code_name:
-            if 'DENSITY' == self._out_type:
-                return '{0}/DATA/density_{1}_{2}_{3}{4}.h5'.format(self.path, self.spec_name, self.field_name, '0'*self.num_of_zeros, self.out_num)
-            elif 'FLD' == self._out_type:
-                return '{0}/DATA/field_{1}_{2}{3}.h5'.format(self.path, self.field_name, '0'*self.num_of_zeros, self.out_num)
-            elif 'RAW' == self._out_type:
-                return '{0}/DATA/raw_{1}_{2}{3}.h5'.format(self.path, self.spec_name, '0'*self.num_of_zeros, self.out_num)
+        tmp_filename = self.get_prefix_filename()
+        if 'TRACKS' != self._out_type:
+            tmp_filename = '{}{}{}.h5'.format(tmp_filename, '0'*self.num_of_zeros, self.actual_num)
+        return tmp_filename
 
     def set_path_filename(self):
         raise RuntimeError('You cannot set path_filename directly!')
@@ -183,9 +252,14 @@ class OutFile:
     time = property(get_time, set_time)
 
 ################################method open################################
-    def open(self):
-        self.fileid = h5py.File(self.path_filename,'r')
+    def open(self, filename=None):
+        '''
+            The normal use is to let the code determin file name according to the PIC code's file name regulation. In some cases one may need to set file name manually, so one may provide filename in the argument.
+        '''
         if self._out_type in self._accepted_out_type:
+            if filename is None: filename=self.path_filename
+            if not os.path.isfile(filename): raise FileNotFoundError('File {} not found!'.format(filename))
+            self.fileid = h5py.File(filename,'r')
 ##value _num_dimensions##
             try:
                 #try to read the dimension from 'AXIS'
@@ -224,6 +298,7 @@ class OutFile:
             #elif 'hipace' == self.code_name:
             self._cell_size = (self._axis_range[1, :] - self._axis_range[0, :]) / nx
             self._time = self.fileid.attrs['TIME'][0]
+        else: raise NotImplementedError('Out type {} not implemented!'.format(self._out_type))
 
 ################################method close################################
     def close(self):
@@ -325,11 +400,11 @@ class OutFile:
         if x3_up is not None:
             select_list = (self._raw_x3 < x3_up) & (select_list)
         if r_low is not None:
-            r_square = np.square(self._raw_x1)+np.square(self._raw_x2)
+            r_square = np.square(self._raw_x3)+np.square(self._raw_x2)
             select_list = (r_square > (r_low*r_low)) & (select_list)
         if r_up is not None:
             try: r_square
-            except KeyError: r_square = np.square(self._raw_x1)+np.square(self._raw_x2)
+            except UnboundLocalError: r_square = np.square(self._raw_x3)+np.square(self._raw_x2)
             select_list = (r_square < (r_up*r_up)) & (select_list)
 
         if p1_low is not None:
@@ -374,12 +449,14 @@ class OutFile:
         one_over_k0_um = (3.541e-20*n0_per_cc)^-0.5
         when if_select = True, only calculate the selected macro particles according to self._raw_select_index.
         '''
-        if if_select and (self._raw_select_index is not None):
-            if 0==len(self._raw_select_index):
-                print("Warning: no particle is selected! Charge is set to 0.")
-                return 0.0
-            q_array = self._raw_q[self._raw_select_index]
-        else: q_array = self._raw_q
+        q_array = self._raw_q
+        if if_select:
+            try:
+                if 0==len(self._raw_select_index):
+                    print("Warning: no particle is selected! Charge is set to 0.")
+                    return 0.0
+                q_array = q_array[self._raw_select_index]
+            except: print("Warning: particle select condition is not valid! All particles are used.")
         #normalized cell volume
         cell_volume_norm = 1.0
         for i in range(self.num_dimensions):
@@ -402,12 +479,14 @@ class OutFile:
         '''
         one_over_k0_um = (3.541e-20*n0_per_cc)**-0.5
         emittances=np.zeros(len(directions))
-        if if_select and (self._raw_select_index is not None):
-            if 0==len(self._raw_select_index):
-                print("Warning: no particle is selected! Emittance is set to 0.")
-                return emittances
-            weights = self._raw_q[self._raw_select_index]
-        else: weights = self._raw_q
+        weights = self._raw_q
+        if if_select:
+            try:
+                if 0==len(self._raw_select_index):
+                    print("Warning: no particle is selected! Emittance is set to 0.")
+                    return emittances
+                weights = weights[self._raw_select_index]
+            except: print("Warning: particle select condition is not valid! All particles are used.")
         weights=np.absolute(weights)
         sum_weight=np.sum(weights)
         for i in range(len(directions)):
@@ -420,9 +499,11 @@ class OutFile:
             else:
                 x=self._raw_x2
                 p=self._raw_p2
-            if if_select and (self._raw_select_index is not None):
-                x = x[self._raw_select_index]
-                p = p[self._raw_select_index]
+            if if_select:
+                try:
+                    x = x[self._raw_select_index]
+                    p = p[self._raw_select_index]
+                except: print("Warning: particle select condition is not valid! All particles are used.")
             term1=np.sum(np.multiply(np.square(x), weights))/sum_weight
             term2=np.sum(np.multiply(np.square(p), weights))/sum_weight
             term3=np.sum(np.multiply(np.multiply(x, p), weights))/sum_weight
@@ -440,11 +521,13 @@ class OutFile:
     def save_tag_file(self, tag_file_name="particles.tags", path=None, if_select = False):
         if path is None:
             path = self.path
-        if if_select and (self._raw_select_index is not None):
-            if 0==len(self._raw_select_index):
-                print("Warning: no particle is selected! Return without saving a tag file.")
-                return 1
-            tag_array = self._raw_tag[self._raw_select_index]
+        if if_select:
+            try:
+                if 0==len(self._raw_select_index):
+                    print("Warning: no particle is selected! Return without saving a tag file.")
+                    return 1
+                tag_array = self._raw_tag[self._raw_select_index]
+            except: print("Warning: particle select condition is not valid! All particles are used.")
         else: tag_array = self._raw_tag
         with open("{}/{}".format(path, tag_file_name),'w',encoding = 'utf-8') as h_file:
         #h_file.close() is guaranteed
@@ -635,7 +718,7 @@ class OutFile:
         return h_fig, h_ax
 
 ################################method pcolor_data_2d################################
-    def pcolor_data_2d(self, h_fig=None, h_ax=None, if_colorbar=True, colorbar_orientation='vertical', if_log_colorbar=False, vmin=None, vmax=None, cmap=plt.cm.jet, alpha=None):
+    def pcolor_data_2d(self, h_fig=None, h_ax=None, if_colorbar=True, colorbar_orientation='vertical', if_log_colorbar=False, vmin=None, vmax=None, cmap=plt.cm.jet, alpha=None, **kwargs):
         '''Plot 2D data in as pcolor'''
         if self._data.ndim!=2:
             raise RuntimeError('Data is not two dimensional! The OutFile.pcolor_data_2d() method cannot proceed.')
@@ -645,9 +728,9 @@ class OutFile:
         if h_ax is None:
             h_ax = h_fig.add_subplot(111)
         if if_log_colorbar:
-            h_plot = h_ax.pcolormesh(x_spread, y_spread, np.absolute(self._data), norm=LogNorm(vmin=vmin, vmax=vmax), cmap=cmap, alpha=alpha, antialiased=True)#, shading='gouraud')
+            h_plot = h_ax.pcolormesh(x_spread, y_spread, np.absolute(self._data), norm=LogNorm(vmin=vmin, vmax=vmax), cmap=cmap, alpha=alpha, **kwargs)
         else:
-            h_plot = h_ax.pcolormesh(x_spread, y_spread, self._data, vmin=vmin, vmax=vmax, cmap=cmap, alpha=alpha)#, shading='gouraud')
+            h_plot = h_ax.pcolormesh(x_spread, y_spread, self._data, vmin=vmin, vmax=vmax, cmap=cmap, alpha=alpha, **kwargs)
         h_ax.set_xlabel('{0} [{1}]'.format(self._axis_labels[0], self._axis_units[0]))
         h_ax.set_ylabel('{0} [{1}]'.format(self._axis_labels[1], self._axis_units[1]))
         if if_colorbar:
@@ -690,9 +773,11 @@ class OutFile:
         '''Get histogram from ene raw data +1 = gamma.'''
         weights=np.absolute(self._raw_q)
         gamma = self._raw_ene+1.
-        if if_select and (self._raw_select_index is not None):
-            weights = weights[self._raw_select_index]
-            gamma = gamma[self._raw_select_index]
+        if if_select:
+            try:
+                weights = weights[self._raw_select_index]
+                gamma = gamma[self._raw_select_index]
+            except: print("Warning: particle select condition is not valid! All particles are used.")
         if range_max is None:
             range_max = gamma.max()
         if range_min is None:
@@ -715,56 +800,83 @@ class OutFile:
         h_ax.set_title('$t = {0:.2f}$'.format(self.time))
         return h_fig, h_ax, bin_edges, hist
 
-################################method plot_raw_hist2D################################
-    def plot_raw_hist2D(self, h_fig=None, h_ax=None, dim=1, num_bins=128, range=None, cmap=None, if_select = False, if_colorbar=True, colorbar_orientation="vertical", if_log_colorbar=False):
-        '''Plot 2D histogram for phasespace from raw data.
-           Please make sure the corresponding raw data is read before calling this.
-           dim=0: p1x1
-           dim=1: p2x2
-           dim=2: p3x3
-           dim=3: x1x2'''
+################################method plot_tracks################################
+    def plot_tracks(self, h_fig=None, h_ax=None, x_quant = b'x1', y_quant = b'x2'):
+        '''Plot tracks from tracking data'''
         if h_fig is None:
             h_fig = plt.figure()
         if h_ax is None:
             h_ax = h_fig.add_subplot(111)
+        n_tracks = self.fileid.attrs.get("NTRACKS")[0]
+        # in OSIRIS track files, QUANTS attribute is a list of string telling which quantities are recorded in data. The 0th element in QUANTS should be ignored.
+        # the quants in OSIRIS output are bytes, thus have prefix b.
+        quants = self.fileid.attrs.get("QUANTS")
+        t_quant_ind = np.where(quants == b't')[0][0]-1
+        x2_quant_ind = np.where(quants == b'x2')[0][0]-1
+        x3_quant_ind = np.where(quants == b'x3')[0][0]-1
+        x_quant_ind = np.where(quants == x_quant)[0][0]-1
+        y_quant_ind = np.where(quants == y_quant)[0][0]-1
+        itermap = np.zeros(self.fileid['itermap'].shape, dtype=int)
+        self.fileid['itermap'].read_direct(itermap)
+        data = np.zeros(self.fileid['data'].shape, dtype=float_type)
+        self.fileid['data'].read_direct(data)
+        seperation_pointer = 0
+        print(np.where(1 == itermap[:,0])[0])
+        print(len(itermap))
+        #for i in range(n_tracks):
+        for i in range(100):
+            #h_ax.plot(data[seperation_pointer:itermap[i,1]+seperation_pointer, x_quant_ind], data[seperation_pointer:itermap[i,1]+seperation_pointer, y_quant_ind])
+            # select condition
+            if (data[itermap[i,1]+seperation_pointer-1, x2_quant_ind]**2+data[itermap[i,1]+seperation_pointer-1, x3_quant_ind]**2)<0.0289:
+                # replace x1 by x1-t
+                h_ax.plot(data[seperation_pointer:itermap[i,1]+seperation_pointer, x_quant_ind]-data[seperation_pointer:itermap[i,1]+seperation_pointer, t_quant_ind], data[seperation_pointer:itermap[i,1]+seperation_pointer, y_quant_ind])
+            seperation_pointer += itermap[i,1]
+        #h_ax.set_xlabel('$\\gamma$')
+        #h_ax.set_ylabel('Counts [arbt. units]')
+        #h_ax.set_title('$t = {0:.2f}$'.format(self.time))
+        return h_fig, h_ax
+
+################################method plot_raw_hist2D################################
+    def plot_raw_hist2D(self, h_fig=None, h_ax=None, dims='p1x1', num_bins=128, range=None, cmap=None, if_select = False, if_colorbar=True, colorbar_orientation="vertical", if_log_colorbar=False):
+        '''Plot 2D histogram for phasespace from raw data.
+           Please make sure the corresponding raw data is read before calling this.
+           dims can be combinations of 'x1', 'x2', 'x3', 'p1', 'p2', 'p3'.'''
+        if h_fig is None:
+            h_fig = plt.figure()
+        if h_ax is None:
+            h_ax = h_fig.add_subplot(111)
+        plot_y_type = dims[0]
+        plot_y_dir = int(dims[1])-1
+        plot_x_type = dims[2]
+        plot_x_dir = int(dims[3])-1
+        type_tuple = ('x','p')
+        if (plot_y_type not in type_tuple) or (plot_x_type not in type_tuple):
+            raise NotImplementedError('dims {} not implemented!'.format(dims))
+        if (plot_y_dir > 2) or (plot_x_dir > 2):
+            raise NotImplementedError('direction in dims should be in (1, 2, 3)!')
+        raw_tuple = ((self._raw_x1, self._raw_x2, self._raw_x3), (self._raw_p1, self._raw_p2, self._raw_p3))
+        label_tuple = (('$k_p z$', '$k_p x$', '$k_p y$'), ('$p_z / m_ec$', '$p_x / m_ec$', '$p_y / m_ec$'))
+        plot_y_type_ind = type_tuple.index(plot_y_type)
+        plot_y = raw_tuple[plot_y_type_ind][plot_y_dir]
+        plot_ylabel = label_tuple[plot_y_type_ind][plot_y_dir]
+        plot_x_type_ind = type_tuple.index(plot_x_type)
+        plot_x = raw_tuple[plot_x_type_ind][plot_x_dir]
+        plot_xlabel = label_tuple[plot_x_type_ind][plot_x_dir]
         weights=np.absolute(self._raw_q)
-        if 0==dim:
-            x=self._raw_x1
-            y=self._raw_p1
-            xlabel='$k_p z$'
-            ylabel='$p_z/m_e c$'
-        elif 1==dim:
-            x=self._raw_x2
-            y=self._raw_p2
-            xlabel='$k_p x$'
-            ylabel='$p_x/m_e c$'
-        elif 2==dim:
-            x=self._raw_x3
-            y=self._raw_p3
-            xlabel='$k_p y$'
-            ylabel='$p_y/m_e c$'
-        elif 3==dim:
-            x=self._raw_x1
-            y=self._raw_x2
-            xlabel='$k_p z$'
-            ylabel='$k_p x$'
-        elif 4==dim:
-            x=self._raw_x1
-            y=self._raw_x3
-            xlabel='$k_p z$'
-            ylabel='$k_p y$'
-        if if_select and (self._raw_select_index is not None):
-            weights = weights[self._raw_select_index]
-            x = x[self._raw_select_index]
-            y = y[self._raw_select_index]
-        H, xedges, yedges = np.histogram2d(x, y, bins=num_bins, range=range, weights=weights)
+        if if_select:
+            try:
+                weights = weights[self._raw_select_index]
+                plot_x = plot_x[self._raw_select_index]
+                plot_y = plot_y[self._raw_select_index]
+            except: print("Warning: particle select condition is not valid! All particles are used.")
+        H, xedges, yedges = np.histogram2d(plot_x, plot_y, bins=num_bins, range=range, weights=weights)
         H=np.transpose(H)
         if if_log_colorbar:
             h_plot = h_ax.pcolormesh(xedges[0:-1], yedges[0:-1], H, norm=LogNorm(), cmap=cmap, antialiased=True)
         else:
             h_plot = h_ax.pcolormesh(xedges[0:-1], yedges[0:-1], H, cmap=cmap, antialiased=True)
-        h_ax.set_xlabel(xlabel)
-        h_ax.set_ylabel(ylabel)
+        h_ax.set_xlabel(plot_xlabel)
+        h_ax.set_ylabel(plot_ylabel)
         if if_colorbar:
             self._color_bar = plt.colorbar(h_plot, ax=h_ax, orientation=colorbar_orientation)
             self._color_bar.set_label('Counts [arb. units]')
@@ -774,13 +886,15 @@ class OutFile:
 ################################method raw_mean_rms_ene################################
     def raw_mean_rms_ene(self, if_select = False):
         '''Return weighted mean value and RMS spread of ene.
-           If if_select and self._raw_select_index is not None, use selection of macroparticles.
+           If if_select and self._raw_select_index is valid, use selection of macroparticles.
            Otherwise use all the macroparticles.'''
         weights=np.absolute(self._raw_q)
         ene = self._raw_ene
-        if if_select and (self._raw_select_index is not None):
-            weights = weights[self._raw_select_index]
-            ene = ene[self._raw_select_index]
+        if if_select:
+            try:
+                weights = weights[self._raw_select_index]
+                ene = ene[self._raw_select_index]
+            except: print("Warning: particle select condition is not valid! All particles are used.")
         ene_avg, sum_weights = np.average(ene, weights=weights, returned=True)
         ene_rms_spread = np.sqrt(np.sum(np.square(ene-ene_avg)*weights)/sum_weights)
         return ene_avg, ene_rms_spread
@@ -967,35 +1081,78 @@ if __name__ == '__main__':
         plt.show()
     def tmp_hipace3D():
         file1 = OutFile(code_name='hipace', path='/home/zming/simulations/os2D/hi_beam3D105',field_name='raw',spec_name='trailer',out_num=990)
-        file1.open()
+        file1.open(filename='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1_Shared_Pardis_Ming/NegBox/50um600pC1.1e16/RAW-beam-driver-000100.h5')
         file1.read_raw_x1()
         file1.read_raw_p1()
         file1.close()
         h_fig = plt.figure()
         h_ax = h_fig.add_subplot(111)
-        h_ax.scatter(file1._raw_x1, file1._raw_p1, s=1, marker='.')
+        h_ax.scatter(file1._raw_x1, file1._raw_p1, s=1, marker='.', c='r')
+        file1.open(filename='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1_Shared_Pardis_Ming/NegBox/50um600pC1.1e16/RAW-plasma-000100.h5')
+        file1.read_raw_x1()
+        file1.read_raw_p1()
+        file1.close()
+        h_ax.scatter(file1._raw_x1, file1._raw_p1, s=1, marker='.', c='b')
         plt.show(block=True)
     def tmp_beam3D():
-        file1 = OutFile(code_name='osiris', path='/home/zming/mnt/os_beam3D122',field_name='psi',out_num=16)
+        file1 = OutFile(path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1_Shared_Pardis_Ming/NegBox/50um600pC1.1e16_test_electron_bunching_yee',field_name='charge',spec_name='plasma',out_num=100)
+        file1.field_name='raw'
         file1.open()
-        file1.read_data_slice()
-        h_fid, h_ax=file1.plot_data()
-        file1.read_data_lineout()
-        file1.plot_data(h_fid, h_ax)
+        file1.read_raw_x1()
+        file1.read_raw_p1()
+        h_fig = plt.figure()
+        h_ax = h_fig.add_subplot(111)
+        h_ax.scatter(file1._raw_x1, file1._raw_p1, s=1, marker='.', c='r')
+        '''file1.read_data_slice()
+        file1.plot_data()'''
+        file1.close()
+        plt.show(block=True)
+    def select_tag():
+        file1 = OutFile(path='/home/zming/mnt/X1_Shared_Pardis_Ming/NegBox/50um600pC1.1e16h',field_name='raw',spec_name='ramp',out_num=20)
+        file1.open()
+        #print(file1.fileid.keys())
+        file1.read_raw_q()
+        file1.read_raw_x1()
+        file1.read_raw_x2()
+        file1.read_raw_x3()
+        file1.read_raw_p1()
+        file1.read_raw_p2()
+        file1.read_raw_p3()
+        h_fig = plt.figure()
+        #file1.select_raw_data(x2_up=0.05, r_up=0.17)
+        h_ax = h_fig.add_subplot(221)
+        file1.plot_raw_hist2D(h_fig, h_ax, dims='p1x1', num_bins=128, range=None, cmap=None, if_select = True, if_colorbar=True, colorbar_orientation="vertical", if_log_colorbar=False)
+        h_ax = h_fig.add_subplot(222)
+        file1.plot_raw_hist2D(h_fig, h_ax, dims='p2x2', num_bins=128, range=None, cmap=None, if_select = True, if_colorbar=True, colorbar_orientation="vertical", if_log_colorbar=False)
+        print('{} pC, {} um'.format(file1.calculate_q_pC(n0_per_cc = 4.9e16, if_select = True), file1.calculate_norm_rms_emittance_um(n0_per_cc = 4.9e16, directions=(2,3), if_select = True)))
+        h_ax = h_fig.add_subplot(223)
+        #h_ax.scatter(file1._raw_x1[file1._raw_select_index], file1._raw_x2[file1._raw_select_index], s=1, marker='.', c='r')
+        h_ax = h_fig.add_subplot(224)
+        #h_ax.scatter(file1._raw_x1[file1._raw_select_index], file1._raw_x3[file1._raw_select_index], s=1, marker='.', c='r')
+        #file1.read_raw_tag()
+        #file1.save_tag_file(if_select = True)
+        file1.close()
+        plt.show(block=True)
+    def tracking():
+        file1 = OutFile(code_name='osiris',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_beam3D110',field_name='tracks',average='',spec_name='He_e')
+        file1.open(filename='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_beam3D110/MS/TRACKS/He_e-tracks_old.h5')
+        file1.plot_tracks()
         file1.close()
         plt.show()
     def test():
-        file1 = OutFile(code_name='osiris',path='/home/zming/mnt/os_PT3D11',field_name='raw',average='',spec_name='e',out_num=20)
-        file1.open()
-        file1.read_raw_q()
-        file1.read_raw_x2()
-        file1.read_raw_x3()
-        file1.read_raw_p2()
-        file1.read_raw_p3()
-        file1.select_raw_data(sample_rate=0.01)
-        print(file1.calculate_norm_rms_emittance_um(n0_per_cc=6.222e17, directions=(2,3), if_select = True))
+        file1 = OutFile(code_name='hipace',path='/home/zming/mnt/X1_Shared_Pardis_Ming/NegBox/50um600pC1.1e16hh',field_name='raw',average='',spec_name='driver',use_num_list=True,out_num=0)
+        #file1.open()
         
-    #test()
+        print(file1.path_filename)
+        file1.out_num=1
+        print(file1.path_filename)
+        file1.out_num=10
+        print(file1.path_filename)
+        #file1.close()
+        
+    test()
+    #tracking()
+    #select_tag()
     #tmp_hipace3D()
-    tmp_beam3D()
+    #tmp_beam3D()
     #tmp_3D()

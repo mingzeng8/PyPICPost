@@ -42,7 +42,10 @@ def get_beam_parameters(os_file, n0_per_cc, gamma_threshold, gamma_spread_method
     else: raise NotImplementedError("Method of {} for gamma spread of the beam has not been implemented yet!".format(gamma_spread_method))
     return os_file.time, q_pC, emittances, gamma, gamma_spread
 
-def plot_beam_parameters_vs_t(path, species_name, n0_per_cc, code_name='osiris', gamma_threshold=1., start=0, count=0, stride=1, max_missing_file=0, gamma_spread_method="lfit"):
+def plot_beam_parameters_vs_t(path, species_name, n0_per_cc, code_name='osiris', gamma_threshold=1., use_num_list=False, start=0, count=0, stride=1, max_missing_file=0, gamma_spread_method="lfit"):
+    '''
+    max_missing_file is the maximum continue files missing allowed. HiPACE sometimes fails in dumping output files.
+    '''
     t_array = list()
     q_pC_array = list()
     emittance_x_array = list()
@@ -50,20 +53,24 @@ def plot_beam_parameters_vs_t(path, species_name, n0_per_cc, code_name='osiris',
     center_gamma_array = list()
     spread_gamma_array = list()
     missing_file = 0
-    os_file = outfile.OutFile(code_name=code_name, path=path, field_name='raw',spec_name=species_name)
+    os_file = outfile.OutFile(code_name=code_name, path=path, field_name='raw',spec_name=species_name, use_num_list=use_num_list)
     for i in range(start, start+count*stride, stride):
-        os_file.out_num=i
+        try: os_file.out_num=i
+        except KeyError:
+            print('Reaching the end of number list. Finishing...')
+            break
+        print(i)
         try:
             os_file.open()
             #set missing_file = 0 if success
             missing_file = 0
         except IOError as err:
-            missing_file = missing_file+1
+            missing_file += 1
             if missing_file>max_missing_file:
-                print('Warning: unable to open file \'{0}\'. Iteration breaks. Exception message:\n{1}'.format(os_file.path_filename, err))
+                print('Warning: seems all files have been processed. Iteration breaks. Exception message:\n{}'.format(err))
                 break
             else:
-                print('Warning! File {0} missing. Exception message:\n{1}'.format(os_file.path_filename, err))
+                print('Warning: File missing. Exception message:\n{}'.format(err))
                 continue
         t, q_pC, emittances, center_gamma, spread_gamma = get_beam_parameters(os_file, n0_per_cc, gamma_threshold, gamma_spread_method=gamma_spread_method)
         os_file.close()
@@ -112,9 +119,10 @@ def plot_beam_parameters_vs_t(path, species_name, n0_per_cc, code_name='osiris',
     plt.show()
 
 if __name__ == '__main__':
-    plot_beam_parameters_vs_t(code_name='hipace', path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1_Shared_Pardis_Ming/50um800pC1.1e16', species_name='trailer', n0_per_cc=1.e16, gamma_threshold=1., start=0, count=99999, stride=20, max_missing_file=1, gamma_spread_method="rms")
+    plot_beam_parameters_vs_t(code_name='osiris', path='/home/zming/mnt/X1_Shared_Pardis_Ming/NegBox/50um600pC1.1e16hh', species_name='ramp', n0_per_cc=1.e16, gamma_threshold=1., start=60, count=9999, stride=1, max_missing_file=0, gamma_spread_method="rms")
+    #plot_beam_parameters_vs_t(code_name='hipace', path='/home/zming/mnt/X1_Shared_Pardis_Ming/NegBox/50um600pC1.1e16hh', species_name='trailer', n0_per_cc=1.e16, gamma_threshold=1., use_num_list=True, start=0, count=99999, stride=1, max_missing_file=1, gamma_spread_method="rms")
     #plot_beam_parameters_vs_t(code_name='osiris', path='/home/zming/simulations/os2D/os_DRI3D19', species_name='plasma', n0_per_cc=4.0e16, gamma_threshold=10., start=33, count=999, stride=1)
     #plot_beam_parameters_vs_t(code_name='osiris', path='/home/zming/mnt/os_PT3D20', species_name='Ne_eK', n0_per_cc=2.43e18, gamma_threshold=50., start=10, count=999, stride=1)
     #plot_beam_parameters_vs_t(code_name='osiris', path='/home/zming/mnt/os_PT3D22', species_name='e', n0_per_cc=5.e17, gamma_threshold=50., start=8, count=999, stride=1)
-    #plot_beam_parameters_vs_t(code_name='osiris', path='/home/zming/mnt/os_beam3D136', species_name='He_e', n0_per_cc=4.9e16, gamma_threshold=1., start=20, count=999, stride=1)
-    #plot_beam_parameters_vs_t(code_name='hipace', path='/home/zming/simulations/os2D/hi_beam3D136', species_name='trailer', n0_per_cc=4.9e16, gamma_threshold=1., start=100, count=999, stride=10)
+    #plot_beam_parameters_vs_t(code_name='osiris', path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_beam3D110', species_name='He_e', n0_per_cc=4.9e16, gamma_threshold=1., start=20, count=999, stride=1)
+    #plot_beam_parameters_vs_t(code_name='hipace', path='/home/zming/simulations/os2D/X1_Shared_Pardis_Ming/NegBox/50um600pC1.1e16', species_name='trailer', n0_per_cc=1.0e16, gamma_threshold=1., start=0, count=999, stride=20)

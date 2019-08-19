@@ -5,13 +5,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 class Frames:
-    def __init__(self, code_name = 'osiris', simulation_path = None, frame_folder = 'Frames', plot_type = 0, start_num = 0, stride_num=1, count_num=1, driver_spec_name='driver', driver_vmin=None, driver_vmax=None, background_spec_name='e', background_vmin=None, background_vmax=None, trail_spec_name=None, trail_vmin=None, trail_vmax=None, if_e1=False, if_psi=False, dir=2, save_type='png', max_missing_file=0):
+    def __init__(self, code_name = 'osiris', simulation_path = None, frame_folder = 'Frames', plot_type = 0, use_num_list = False, start_num = 0, stride_num=1, count_num=1, if_scan_folder=False, driver_spec_name='driver', driver_vmin=None, driver_vmax=None, background_spec_name='e', background_vmin=None, background_vmax=None, trail_spec_name=None, trail_vmin=None, trail_vmax=None, if_e1=False, if_psi=False, dir=2, save_type='png', max_missing_file=0):
         self.code_name = code_name
         self.simulation_path = simulation_path
         self.frame_path = simulation_path+'/'+frame_folder
+        self.use_num_list = use_num_list
         self.start_num = start_num
         self.stride_num = stride_num
         self.count_num = count_num
+        # when if_scan_folder is True, scan the folder and generate a list of all available fils.
+        self.if_scan_folder = if_scan_folder
         self.plot_type = plot_type
         self.driver_spec_name = driver_spec_name
         self.driver_vmin = driver_vmin
@@ -116,7 +119,7 @@ class Frames:
 #plot one frame for beam driven cases
     def plot_beam_driven(self, out_num):
         h_fig = plt.figure(figsize=(8,4.5))
-        file1 = outfile.OutFile(code_name = self.code_name, path=self.simulation_path, field_name='charge', average='', spec_name=self.background_spec_name, out_num=out_num)
+        file1 = outfile.OutFile(code_name = self.code_name, path=self.simulation_path, field_name='charge', average='', spec_name=self.background_spec_name, use_num_list = self.use_num_list, out_num=out_num)
         h_ax = h_fig.add_subplot(111)
         h_ax.set_aspect('equal','box')
         file1.open()
@@ -161,7 +164,7 @@ class Frames:
 #plot one frame for laser driven cases
     def plot_laser_driven(self, out_num):
         h_fig = plt.figure(figsize=(6.5,5))
-        file1 = outfile.OutFile(path=self.simulation_path, field_name='charge', average='', spec_name=self.background_spec_name, out_num=out_num)
+        file1 = outfile.OutFile(path=self.simulation_path, field_name='charge', average='', spec_name=self.background_spec_name, use_num_list = self.use_num_list, out_num=out_num)
         h_ax = h_fig.add_subplot(111)
         #h_ax.set_aspect('equal', 'box')
         #plt.ylim(-10,10)
@@ -192,7 +195,7 @@ class Frames:
 #plot one frame of p1x1 for species self.trail_spec_name
     def plot_p1x1(self, out_num):
         h_fig = plt.figure(figsize=(6.5,5))
-        file1 = outfile.OutFile(path=self.simulation_path, field_name='p1x1', average='', spec_name=self.trail_spec_name, out_num=out_num)
+        file1 = outfile.OutFile(path=self.simulation_path, field_name='p1x1', average='', spec_name=self.trail_spec_name, use_num_list = self.use_num_list, out_num=out_num)
         h_ax = h_fig.add_subplot(111)
         file1.open()
         file1.read_data()
@@ -206,7 +209,7 @@ class Frames:
 #plot one frame of phasespace x1x2 for species self.trail_spec_name. Phasespace is constructed from raw data
     def plot_x1x2_raw(self, out_num):
         h_fig = plt.figure(figsize=(6.5,5))
-        file1 = outfile.OutFile(path=self.simulation_path, field_name='raw', spec_name=self.trail_spec_name, out_num=out_num)
+        file1 = outfile.OutFile(path=self.simulation_path, field_name='raw', spec_name=self.trail_spec_name, use_num_list = self.use_num_list, out_num=out_num)
         h_ax = h_fig.add_subplot(111)
         file1.open()
         file1.read_raw_q()
@@ -221,7 +224,7 @@ class Frames:
 #plot one frame of phasespace x1x3 for species self.trail_spec_name. Phasespace is constructed from raw data
     def plot_x1x3_raw(self, out_num):
         h_fig = plt.figure(figsize=(6.5,5))
-        file1 = outfile.OutFile(path=self.simulation_path, field_name='raw', spec_name=self.trail_spec_name, out_num=out_num)
+        file1 = outfile.OutFile(path=self.simulation_path, field_name='raw', spec_name=self.trail_spec_name, use_num_list = self.use_num_list, out_num=out_num)
         h_ax = h_fig.add_subplot(111)
         file1.open()
         file1.read_raw_q()
@@ -236,7 +239,7 @@ class Frames:
 #plot one frame of phasespace x2p2 for species self.trail_spec_name. Phasespace is constructed from raw data
     def plot_x2p2_raw(self, out_num):
         h_fig = plt.figure(figsize=(6.5,5))
-        file1 = outfile.OutFile(path=self.simulation_path, field_name='raw', spec_name=self.trail_spec_name, out_num=out_num)
+        file1 = outfile.OutFile(path=self.simulation_path, field_name='raw', spec_name=self.trail_spec_name, use_num_list = self.use_num_list, out_num=out_num)
         h_ax = h_fig.add_subplot(111)
         file1.open()
         file1.read_raw_q()
@@ -251,7 +254,7 @@ class Frames:
 #plot one frame of phasespace x3p3 for species self.trail_spec_name. Phasespace is constructed from raw data
     def plot_x3p3_raw(self, out_num):
         h_fig = plt.figure(figsize=(6.5,5))
-        file1 = outfile.OutFile(path=self.simulation_path, field_name='raw', spec_name=self.trail_spec_name, out_num=out_num)
+        file1 = outfile.OutFile(path=self.simulation_path, field_name='raw', spec_name=self.trail_spec_name, use_num_list = self.use_num_list, out_num=out_num)
         h_ax = h_fig.add_subplot(111)
         file1.open()
         file1.read_raw_q()
@@ -289,12 +292,15 @@ class Frames:
                 self.plot_save(i)
                 #set missing_file = 0 if success
                 missing_file = 0
-            except IOError as err:
+            except FileNotFoundError as err:
                 missing_file = missing_file+1
                 if missing_file>self.max_missing_file:
                     print('Iteration stops at frame number {0}. Exception message:\n{1}'.format(i, err))
                     break
                 else: print('Warning! File No. {0} missing. Exception message:\n{1}'.format(i, err))
+            except ValueError as err:
+                print('Number {} does not exist. Seems all files are processed. Finishing...'.format(i))
+                break
 
 ################################method make_movie################################
 #make movie based on the saved frames
@@ -303,13 +309,14 @@ class Frames:
 #        subprocess.call('mencoder \'{0}/*.png\' -mf type=png:fps=10 -ovc lavc -lavcopts vcodec=wmv2 -oac copy -o {0}/movie.mpg'.format(self.frame_path), shell=True)
 
 if __name__ == '__main__':
-    #frame1 = Frames(code_name = 'hipace', simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1_Shared_Pardis_Ming/50um300pC0.9e16', frame_folder='Frames1', plot_type = 0, start_num = 0, stride_num=20, count_num=99999, background_spec_name='plasma', background_vmin=-5, driver_spec_name='beam', driver_vmin=-5, if_e1=False, if_psi=False, max_missing_file=2, dir=1)
+    #frame1 = Frames(code_name = 'hipace', simulation_path = '/home/zming/mnt/X1_Shared_Pardis_Ming/NegBox/50um600pC1.1e16hh', frame_folder='Frames2', plot_type = 0, use_num_list = True, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma_electrons', background_vmin=-5, driver_spec_name='driver', driver_vmin=-5, trail_spec_name='trailer', trail_vmax=0., trail_vmin=-11., if_e1=False, if_psi=False, max_missing_file=2, dir=2)
+    frame1 = Frames(simulation_path = '/home/zming/mnt/X1_Shared_Pardis_Ming/NegBox/50um600pC1.1e16hh', frame_folder='os_Frames/Frames2', plot_type = 0, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-5, driver_spec_name='driver', driver_vmin=-5, trail_spec_name='ramp', trail_vmax=0., trail_vmin=-11., if_e1=False, if_psi=False, dir=2)
     #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/simulations/os2D/os_DRI3D19', frame_folder='x3p3', plot_type = 6, start_num = 37, stride_num=1, count_num=99999, trail_spec_name='plasma')
     #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/simulations/os2D/os_DRI3D19', frame_folder='Frames1', plot_type = 0, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-10, driver_spec_name='beam-driver', driver_vmin=-5, if_e1=True, if_psi=False, dir=1)
     #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/simulations/os2D/os_DRI3D19', frame_folder='p1x1', plot_type = 2, start_num = 16, stride_num=1, count_num=99999, trail_spec_name='plasma')
-    #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/mnt/os_PT3D22', frame_folder='p1x1', plot_type = 2, start_num = 1, stride_num=1, count_num=99999, trail_spec_name='e')
-    #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/mnt/os_PT3D22', frame_folder='Frames2', plot_type = 1, start_num = 0, stride_num=1, count_num=99999, background_spec_name='e', trail_spec_name=None, if_e1=False, if_psi=False, dir=2)
-    frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/mnt/os_beam3D136', frame_folder='Frames2', plot_type = 0, start_num = 13, stride_num=1, count_num=99999, background_spec_name='e', background_vmin=-5, driver_spec_name='driver', driver_vmin=-5, trail_spec_name='He_e', trail_vmax=0, if_e1=True, if_psi=True, dir=2)
-    #frame1 = Frames(code_name = 'hipace', simulation_path = '/home/zming/simulations/os2D/hi_beam3D136', frame_folder='Frames2', plot_type = 0, start_num = 0, stride_num=10, count_num=99999, background_spec_name='plasma', background_vmin=-5, driver_spec_name='beam', driver_vmin=-5, if_e1=False, if_psi=False, dir=2, max_missing_file=1)
+    #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/mnt/os_PT3D23', frame_folder='p1x1', plot_type = 2, start_num = 1, stride_num=1, count_num=99999, trail_spec_name='e')
+    #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/mnt/os_PT3D23', frame_folder='Frames2', plot_type = 1, start_num = 0, stride_num=1, count_num=99999, background_spec_name='e', trail_spec_name=None, if_e1=False, if_psi=False, dir=2)
+    #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/mnt/os_beam3D110', frame_folder='Frames2', plot_type = 0, start_num = 14, stride_num=1, count_num=99999, background_spec_name='e', background_vmin=-5, driver_spec_name='driver', driver_vmin=-5, trail_spec_name='He_e', trail_vmax=0, trail_vmin=-1, if_e1=True, if_psi=True, dir=2)
+    #frame1 = Frames(code_name = 'hipace', simulation_path = '/home/zming/simulations/os2D/X1_Shared_Pardis_Ming/NegBox/50um600pC1.1e16', frame_folder='Frames2', plot_type = 0, start_num = 0, stride_num=20, count_num=99999, background_spec_name='plasma', background_vmin=-10, driver_spec_name='beam', driver_vmin=-50, if_e1=False, if_psi=False, max_missing_file=1, dir=2)
     frame1.save_frames()
     #frame1.make_movie()
