@@ -7,8 +7,9 @@ from scipy import e as const_e
 from scipy.constants import e as e_charge
 from matplotlib.colors import LogNorm
 from glob import glob
-import parse
-import os
+import os, warnings
+try: import parse
+except ImportError: warnings.warn('Cannot import lib \'parse\'. num_list cannot be activated.')
 
 float_type=np.float64
 
@@ -35,7 +36,7 @@ class OutFile:
         self._field_names = {'psi':'$\psi$', 'e1':'$E_z$', 'e2':'$E_x$', 'e3':'$E_y$', 'e3_cyl_m':'$E_y$', 'b1':'$B_z$', 'b2':'$B_x$', 'b3':'$B_y$', 'j1':'$J_z$', 'ene':'$E_k / n_p m_e c^2$', 'charge':'$\\rho$', 'ion_charge':'$\\rho$', 'p1x1':'$p_1x_1$ [arb. units]', 'p2x2':'$p_2x_2$ [arb. units]', 'beam_charge':'$\\rho_b$', 'plasma_charge':'$\\rho_e$', 'ExmBy':'$E_x-B_y$', 'Ez':'$E_z$', 'EypBx':'$E_y+B_x$'\
         # Some field naming problem in new HiPACE
         , 'plasma_electrons': '$\\rho_e$', 'driver': '$\\rho_d$', 'trailer': '$\\rho_t$'}
-        self._accepted_out_type = {'DENSITY', 'FLD', 'FLD_CYL_M', 'ION', 'PHA', 'RAW'}
+        self._accepted_out_type = {'DENSITY', 'FLD', 'FLD_CYL_M', 'ION', 'PHA', 'RAW', 'TRACKS'}
         # if use_num_list = True, the actual out_num used is self._avail_num_list[out_num]
         self.use_num_list = use_num_list
         self.out_num = out_num
@@ -174,7 +175,7 @@ class OutFile:
             elif 'RAW' == self._out_type:
                 self._prefix_filename = '{0}/{1}/RAW-{1}-'.format(main_folder_path, self.spec_name)
             elif 'TRACKS' == self._out_type:
-                self._prefix_filenamex = '{0}/{1}-tracks.h5'.format(main_folder_path, self.spec_name)
+                self._prefix_filename = '{0}/{1}-tracks.h5'.format(main_folder_path, self.spec_name)
         elif 'hipace' == self.code_name:
             main_folder_path = '{}/DATA'.format(self.path)
             if 'DENSITY' == self._out_type:
@@ -256,10 +257,14 @@ class OutFile:
         '''
             The normal use is to let the code determin file name according to the PIC code's file name regulation. In some cases one may need to set file name manually, so one may provide filename in the argument.
         '''
-        if self._out_type in self._accepted_out_type:
-            if filename is None: filename=self.path_filename
-            if not os.path.isfile(filename): raise FileNotFoundError('File {} not found!'.format(filename))
-            self.fileid = h5py.File(filename,'r')
+        if self._out_type not in self._accepted_out_type: raise NotImplementedError('Out type {} not implemented!'.format(self._out_type))
+        if filename is None: filename=self.path_filename
+        if not os.path.isfile(filename): raise FileNotFoundError('File {} not found!'.format(filename))
+        self.fileid = h5py.File(filename,'r')
+        # Do not obtain the grid information if the type is TRACKS
+        if self._out_type in ['TRACKS']: pass
+        else:
+        # Obtain the grid information
 ##value _num_dimensions##
             try:
                 #try to read the dimension from 'AXIS'
@@ -298,7 +303,6 @@ class OutFile:
             #elif 'hipace' == self.code_name:
             self._cell_size = (self._axis_range[1, :] - self._axis_range[0, :]) / nx
             self._time = self.fileid.attrs['TIME'][0]
-        else: raise NotImplementedError('Out type {} not implemented!'.format(self._out_type))
 
 ################################method close################################
     def close(self):
@@ -801,7 +805,7 @@ class OutFile:
         return h_fig, h_ax, bin_edges, hist
 
 ################################method plot_tracks################################
-    def plot_tracks(self, h_fig=None, h_ax=None, x_quant = b'x1', y_quant = b'x2'):
+    def plot_tracks(self, h_fig=None, h_ax=None, x_quant = b'x1', y_quant = b'x2', mwin_v = 0., mwin_t_offset = 0.):
         '''Plot tracks from tracking data'''
         if h_fig is None:
             h_fig = plt.figure()
@@ -828,8 +832,8 @@ class OutFile:
             #h_ax.plot(data[seperation_pointer:itermap[i,1]+seperation_pointer, x_quant_ind], data[seperation_pointer:itermap[i,1]+seperation_pointer, y_quant_ind])
             # select condition
             if (data[itermap[i,1]+seperation_pointer-1, x2_quant_ind]**2+data[itermap[i,1]+seperation_pointer-1, x3_quant_ind]**2)<0.0289:
-                # replace x1 by x1-t
-                h_ax.plot(data[seperation_pointer:itermap[i,1]+seperation_pointer, x_quant_ind]-data[seperation_pointer:itermap[i,1]+seperation_pointer, t_quant_ind], data[seperation_pointer:itermap[i,1]+seperation_pointer, y_quant_ind])
+                # replace x1 by x1-mwin_v*t+mwin_t_offset
+                h_ax.plot(data[seperation_pointer:itermap[i,1]+seperation_pointer, x_quant_ind]-data[seperation_pointer:itermap[i,1]+seperation_pointer, t_quant_ind]*mwin_v+mwin_t_offset, data[seperation_pointer:itermap[i,1]+seperation_pointer, y_quant_ind])
             seperation_pointer += itermap[i,1]
         #h_ax.set_xlabel('$\\gamma$')
         #h_ax.set_ylabel('Counts [arbt. units]')
@@ -1134,9 +1138,12 @@ if __name__ == '__main__':
         file1.close()
         plt.show(block=True)
     def tracking():
-        file1 = OutFile(code_name='osiris',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_beam3D110',field_name='tracks',average='',spec_name='He_e')
-        file1.open(filename='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_beam3D110/MS/TRACKS/He_e-tracks_old.h5')
-        file1.plot_tracks()
+        file1 = OutFile(code_name='osiris',path='/home/zming/mnt/JDATA/os_beam3D/os_beam3D110',field_name='tracks',average='',spec_name='He_e')
+        file1.open()
+        file1.plot_tracks(x_quant = b't', y_quant = b'x1')
+        file1.plot_tracks(x_quant = b't', y_quant = b'x2')
+        file1.plot_tracks(x_quant = b't', y_quant = b'x3')
+        #file1.plot_tracks(mwin_v = 1., mwin_t_offset = 32.3)
         file1.close()
         plt.show()
     def test():
@@ -1150,8 +1157,8 @@ if __name__ == '__main__':
         print(file1.path_filename)
         #file1.close()
         
-    test()
-    #tracking()
+    #test()
+    tracking()
     #select_tag()
     #tmp_hipace3D()
     #tmp_beam3D()
