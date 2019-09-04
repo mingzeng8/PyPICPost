@@ -319,36 +319,43 @@ class OutFile:
     def read_raw_q(self):
         self._raw_q = np.zeros(self.fileid['q'].shape, dtype=float_type)
         self.fileid['q'].read_direct(self._raw_q)
+        return self._raw_q
 
 ################################method read_raw_x1################################
     def read_raw_x1(self):
         self._raw_x1 = np.zeros(self.fileid['x1'].shape, dtype=float_type)
         self.fileid['x1'].read_direct(self._raw_x1)
+        return self._raw_x1
 
 ################################method read_raw_x2################################
     def read_raw_x2(self):
         self._raw_x2 = np.zeros(self.fileid['x2'].shape, dtype=float_type)
         self.fileid['x2'].read_direct(self._raw_x2)
+        return self._raw_x2
 
 ################################method read_raw_x3################################
     def read_raw_x3(self):
         self._raw_x3 = np.zeros(self.fileid['x3'].shape, dtype=float_type)
         self.fileid['x3'].read_direct(self._raw_x3)
+        return self._raw_x3
 
 ################################method read_raw_p1################################
     def read_raw_p1(self):
         self._raw_p1 = np.zeros(self.fileid['p1'].shape, dtype=float_type)
         self.fileid['p1'].read_direct(self._raw_p1)
+        return self._raw_p1
 
 ################################method read_raw_p2################################
     def read_raw_p2(self):
         self._raw_p2 = np.zeros(self.fileid['p2'].shape, dtype=float_type)
         self.fileid['p2'].read_direct(self._raw_p2)
+        return self._raw_p2
 
 ################################method read_raw_p3################################
     def read_raw_p3(self):
         self._raw_p3 = np.zeros(self.fileid['p3'].shape, dtype=float_type)
         self.fileid['p3'].read_direct(self._raw_p3)
+        return self._raw_p3
 
 ################################method read_raw_ene################################
     def read_raw_ene(self, ene_key_warning=True):
@@ -361,6 +368,7 @@ class OutFile:
             #but one can explicitly silence this message by setting ene_key_warning=False
                 print('Warning! Key \'ene\' does not exist in particle raw data! Reading p1, p2, p3 and doing ene=sqrt(p1^2+p2^2+p3^2)-1 instead. Please make sure p1, p2, p3 are read before this!')
             self._raw_ene = np.sqrt(np.square(self._raw_p1)+np.square(self._raw_p2)+np.square(self._raw_p3))-1.
+        return self._raw_ene
 
 ################################method select_raw_data################################
 # Select particles according to the raw data
@@ -772,7 +780,7 @@ class OutFile:
         h_ax.set_title('$p_z$ histogram. $\\|p_z\\|$ average = {0:.2f}'.format(p))
         return h_fig, h_ax, bin_edges, hist
 
-################################method plot_raw_hist_gamma################################
+################################method raw_hist_gamma################################
     def raw_hist_gamma(self, num_bins=256, range_max=None, range_min=None, if_select = False):
         '''Get histogram from ene raw data +1 = gamma.'''
         weights=np.absolute(self._raw_q)
@@ -791,14 +799,14 @@ class OutFile:
         return bin_edges, hist
 
 ################################method plot_raw_hist_gamma################################
-    def plot_raw_hist_gamma(self, h_fig=None, h_ax=None, num_bins=256, range_max=None, range_min=None, if_select = False):
+    def plot_raw_hist_gamma(self, h_fig=None, h_ax=None, num_bins=256, range_max=None, range_min=None, if_select = False, **kwargs):
         '''Plot histogram from ene raw data +1 = gamma.'''
         if h_fig is None:
             h_fig = plt.figure()
         if h_ax is None:
             h_ax = h_fig.add_subplot(111)
         bin_edges, hist = self.raw_hist_gamma(num_bins, range_max, range_min, if_select = if_select)
-        h_ax.plot(bin_edges, hist)
+        h_ax.plot(bin_edges, hist, **kwargs)
         h_ax.set_xlabel('$\\gamma$')
         h_ax.set_ylabel('Counts [arbt. units]')
         h_ax.set_title('$t = {0:.2f}$'.format(self.time))
@@ -845,6 +853,10 @@ class OutFile:
         '''Plot 2D histogram for phasespace from raw data.
            Please make sure the corresponding raw data is read before calling this.
            dims can be combinations of 'x1', 'x2', 'x3', 'p1', 'p2', 'p3'.'''
+        weights=np.absolute(self.read_raw_q())
+        if weights.size<2:
+            warnings.warn("No particle contained in the RAW file! Skipping...")
+            return
         if h_fig is None:
             h_fig = plt.figure()
         if h_ax is None:
@@ -858,15 +870,15 @@ class OutFile:
             raise NotImplementedError('dims {} not implemented!'.format(dims))
         if (plot_y_dir > 2) or (plot_x_dir > 2):
             raise NotImplementedError('direction in dims should be in (1, 2, 3)!')
-        raw_tuple = ((self._raw_x1, self._raw_x2, self._raw_x3), (self._raw_p1, self._raw_p2, self._raw_p3))
+        read_raw_tuple = ((self.read_raw_x1(), self.read_raw_x2(), self.read_raw_x3()), (self.read_raw_p1(), self.read_raw_p2(), self.read_raw_p3()))
+        #raw_tuple = ((self._raw_x1, self._raw_x2, self._raw_x3), (self._raw_p1, self._raw_p2, self._raw_p3))
         label_tuple = (('$k_p z$', '$k_p x$', '$k_p y$'), ('$p_z / m_ec$', '$p_x / m_ec$', '$p_y / m_ec$'))
         plot_y_type_ind = type_tuple.index(plot_y_type)
-        plot_y = raw_tuple[plot_y_type_ind][plot_y_dir]
+        plot_y = read_raw_tuple[plot_y_type_ind][plot_y_dir]
         plot_ylabel = label_tuple[plot_y_type_ind][plot_y_dir]
         plot_x_type_ind = type_tuple.index(plot_x_type)
-        plot_x = raw_tuple[plot_x_type_ind][plot_x_dir]
+        plot_x = read_raw_tuple[plot_x_type_ind][plot_x_dir]
         plot_xlabel = label_tuple[plot_x_type_ind][plot_x_dir]
-        weights=np.absolute(self._raw_q)
         if if_select:
             try:
                 weights = weights[self._raw_select_index]

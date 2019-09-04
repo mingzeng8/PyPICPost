@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
-def plot_W_vs_t(path, field_name='e3', species_name='', average='', cyl_m='False', start=0, count=0, stride=1):
+def get_W_vs_t(path, field_name='e3', species_name='', average='', cyl_m='False', start=0, count=0, stride=1):
     '''Plot the W evolution'''
     if not isinstance(path, str):
         raise TypeError('The path should be a string!')
@@ -52,15 +52,16 @@ def plot_W_vs_t(path, field_name='e3', species_name='', average='', cyl_m='False
     except KeyboardInterrupt:
         print('Keyboard interruption occurs at file \'{0}\'. Iteration breaks.'.format(os_file.path_filename))
 
-    W_max = max(W_array)
-    W_max_i = W_array.index(W_max)
-    print('W_max = {0} at index {1}, t = {2}'.format(W_max, W_max_i, t_array[W_max_i]))
-    fig1 = plt.figure()
-    ax1 = fig1.add_subplot(111)
-    ax1.plot(t_array, W_array)
-    plt.xlabel('t [$\\omega_p$]')
-    plt.ylabel('w [$c / \\omega_p$]')
-    return ([[i*stride+start, t_array[i], W_array[i], a_array[i]] for i in range(len(t_array))], fig1)
+    #W_max = max(W_array)
+    #W_max_i = W_array.index(W_max)
+    #print('W_max = {0} at index {1}, t = {2}'.format(W_max, W_max_i, t_array[W_max_i]))
+    #fig1 = plt.figure()
+    #ax1 = fig1.add_subplot(111)
+    #ax1.plot(t_array, W_array)
+    #plt.xlabel('t [$\\omega_p$]')
+    #plt.ylabel('w [$c / \\omega_p$]')
+    #return ([[i*stride+start, t_array[i], W_array[i], a_array[i]] for i in range(len(t_array))], fig1)
+    return ([[i*stride+start, t_array[i], W_array[i], a_array[i]] for i in range(len(t_array))])
 
 if __name__ == '__main__':
     import argparse
@@ -74,18 +75,36 @@ if __name__ == '__main__':
         average='-savg'
     else:
         average=''
-    #prefix='PT3D'
-    prefix='laser3D'
-    print('Working on os_'+prefix+fnum+'...')
+    parent_folder='/home/zming/mnt/'
+    prefix='os_PT3D'
+    #prefix='os_laser3D'
+    print('Working on '+prefix+fnum+'...')
     #if fnum[-1]=='h':
     #    average='-savg'
-    t_W_array, h_fig = plot_W_vs_t('/home/zming/simulations/os2D/os_'+prefix+fnum, 'e3', average=average, cyl_m=parser.parse_args().cyl_m, start=0, count=600, stride=1)
-    print(t_W_array)
-    plot_save_name='/home/zming/simulations/os2D/os_{0}{1}/{0}{1}.png'.format(prefix,fnum)
+    data_save_name=parent_folder+'{0}{1}/{0}{1}.data'.format(prefix,fnum)
+    try:
+        data_old = np.genfromtxt(data_save_name,delimiter=',')
+        start_ind=int(data_old[-1,0])+1
+        print("File {} exists. Read data from this file.".format(data_save_name))
+    except:
+        start_ind=0
+        print("File {} does not exist. Calculate from the beginning.".format(data_save_name))
+    data_new = get_W_vs_t(parent_folder+prefix+fnum, 'e3', average=average, cyl_m=parser.parse_args().cyl_m, start=start_ind, count=600, stride=1,)
+    data_new = np.array(data_new)
+    try:
+        data_new=np.concatenate((data_old,data_new))
+    except:
+        print("Calculate from the beginning.")
+    W_max = np.max(data_new[:,2])
+    W_max_ind = np.argmax(data_new[:,2])
+    print('W_max = {} at index {}, t = {}'.format(W_max, W_max_ind, data_new[W_max_ind,1]))
+    plt.plot(data_new[:,1], data_new[:,2])
+    plt.xlabel('t [$\\omega_p$]')
+    plt.ylabel('w [$c / \\omega_p$]')
+    plot_save_name=parent_folder+'{0}{1}/{0}{1}.png'.format(prefix,fnum)
     plt.savefig(plot_save_name)
     print('Plot saved at '+plot_save_name)
-    data_save_name='/home/zming/simulations/os2D/os_{0}{1}/{0}{1}.data'.format(prefix,fnum)
-    np.savetxt(data_save_name, np.array(t_W_array), delimiter=',', fmt='%.5f')
+    np.savetxt(data_save_name, np.array(data_new), delimiter=', ', fmt='%.5f')
     print('Data saved at '+data_save_name)
     plt.show(block=True)
     
