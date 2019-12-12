@@ -5,11 +5,13 @@ import TwoDGaussianFit as tdgf
 from scipy import signal, pi
 from scipy import e as const_e
 from scipy.constants import e as e_charge
+from scipy.signal import find_peaks
 from matplotlib.colors import LogNorm
 from glob import glob
 import os, warnings
 try: import parse
 except ImportError: warnings.warn('Cannot import lib \'parse\'. num_list cannot be activated.')
+import my_cmap
 
 float_type=np.float64
 
@@ -128,7 +130,9 @@ class OutFile:
         if self.use_num_list:
             #try: self._avail_num_list
             #except: self.reset_avail_num_list()
-            if value not in range(len(self._avail_num_list)): raise KeyError('Using num_list. out_num = {}, not in range({})!'.format(value, len(self._avail_num_list)))
+            if value not in range(len(self._avail_num_list)):
+                #print('self._avail_num_list is ({})'.format(self._avail_num_list))
+                raise KeyError('Using num_list. out_num = {}, not in range({})!'.format(value, len(self._avail_num_list)))
             self.actual_num = self._avail_num_list[value]
         else:
             if value not in range(int(10**self.digit_num)):
@@ -201,6 +205,7 @@ class OutFile:
         file_list = glob(format_string.format('*'))
         try: num_list=[int(parse.parse(format_string, file_list[i])[0]) for i in range(len(file_list))]
         except ValueError: num_list=[float(parse.parse(format_string, file_list[i])[0]) for i in range(len(file_list))]
+        if len(num_list)<1: raise RuntimeError('num_list is empty! Check the file path. format_string = {}'.format(format_string))
         num_list.sort()
         self._avail_num_list = num_list
 
@@ -488,19 +493,30 @@ class OutFile:
         one_over_k0_um: one over k0, in unit of micrometer
         one_over_k0_um = (3.541e-20*n0_per_cc)^-0.5
         when if_select = True, only calculate the selected macro particles according to self._raw_select_index.
+        return: 2 elements. The first is normalized emittance list in each of the given directions. The second is a list of 3 elements: the 3 Courant-Snyder parameters in each of the given directions.
+        return all 0 if no particle is selected.
         '''
-        one_over_k0_um = (3.541e-20*n0_per_cc)**-0.5
-        emittances=np.zeros(len(directions))
-        weights = self._raw_q
+        one_over_k0_um_square = 1./(3.541e-20*n0_per_cc)
+        one_over_k0_mm = np.sqrt(one_over_k0_um_square)/1.e3
+        norm_emittances=np.zeros(len(directions))
+
+        # Courant-Snyder parameters
+        alphas=np.zeros(len(directions))
+        betas=np.zeros(len(directions))
+        gammas=np.zeros(len(directions))
+
+        weights = np.absolute(self._raw_q)
+        p1_array=self._raw_p1
         if if_select:
             try:
                 if 0==len(self._raw_select_index):
                     print("Warning: no particle is selected! Emittance is set to 0.")
-                    return emittances
+                    return emittances, [alphas, betas, gammas]
                 weights = weights[self._raw_select_index]
+                p1_array = p1_array[self._raw_select_index]
             except: print("Warning: particle select condition is not valid! All particles are used.")
-        weights=np.absolute(weights)
         sum_weight=np.sum(weights)
+        mean_p1=np.sum(np.multiply(p1_array, weights))/sum_weight
         for i in range(len(directions)):
             if 3==directions[i]:
                 x=self._raw_x3
@@ -516,11 +532,24 @@ class OutFile:
                     x = x[self._raw_select_index]
                     p = p[self._raw_select_index]
                 except: print("Warning: particle select condition is not valid! All particles are used.")
-            term1=np.sum(np.multiply(np.square(x), weights))/sum_weight
-            term2=np.sum(np.multiply(np.square(p), weights))/sum_weight
-            term3=np.sum(np.multiply(np.multiply(x, p), weights))/sum_weight
-            emittances[i]=np.sqrt(term1*term2-term3*term3)*one_over_k0_um
-        return emittances
+            # The geometric emittance calculation refer to
+            # http://nicadd.niu.edu/~syphers/uspas/2018w/some-notes-on-ellipses.html
+            # unnormalize x to mm
+            x=x*one_over_k0_mm
+            # calculate x prime in mrad
+            y=p/p1_array*1.e3
+            s11=np.sum(np.multiply(np.square(x), weights))/sum_weight
+            s22=np.sum(np.multiply(np.square(y), weights))/sum_weight
+            s12=np.sum(np.multiply(np.multiply(x, y), weights))/sum_weight
+            eps_pi=np.sqrt(s11*s22-np.square(s12))
+            # alpha does not have unit
+            alphas[i] = -s12/eps_pi
+            # beta in unit of meter
+            betas[i]  =  s11/eps_pi
+            # gamma in unit of 1/meter
+            gammas[i] =  s22/eps_pi
+            norm_emittances[i] = eps_pi*mean_p1
+        return norm_emittances, [alphas, betas, gammas]
 
 ################################method save_tag_file################################
 # Save tage file for particle tracking
@@ -614,12 +643,14 @@ class OutFile:
         return project_methods[self._data.ndim-2](*args, **kwargs)
 
 ################################method data_project3d################################
-    def data_project3d(self, dir = 0, if_abs = False):
+    def data_project3d(self, dir = 0, if_abs = False, if_square = False):
         '''dir is the direction the summation is taking through'''
         if dir not in range (3):
             raise ValueError('Project direction should be 0, 1 or 2!')
         if if_abs:
             self._data = np.absolute(self._data)
+        if if_square:
+            self._data = np.square(self._data)
         self._data = np.sum(self._data, axis = 2-dir)/self.fileid[self._data_name_in_file].shape[2-dir]
         self._axis_slices = [self._axis_slices[i] for i in range(3) if i!=dir]
         self._axis_labels = [self._axis_labels_original[i] for i in range(self._num_dimensions) if i!=dir]
@@ -627,17 +658,55 @@ class OutFile:
         self._fig_title = 't = {0:.2f}, project {1}along {2} direction'.format(self.time, 'absolute value ' if if_abs else '', self._axis_labels_original[dir])
 
 ################################method data_project2d################################
-    def data_project2d(self, dir = 0, if_abs = False):
+    def data_project2d(self, dir = 0, if_abs = False, if_square = False):
         '''dir is the direction the summation is taking through'''
         if dir not in range (2):
             raise ValueError('Project direction should be 0 or 1!')
         if if_abs:
             self._data = np.absolute(self._data)
+        if if_square:
+            self._data = np.square(self._data)
         self._data = np.sum(self._data, axis = 1-dir)/self.fileid[self._data_name_in_file].shape[1-dir]
         self._axis_slices = [self._axis_slices[1-dir]]
         self._axis_labels = [self._axis_labels_original[1-dir]]
         self._axis_units = [self._axis_units_original[1-dir]]
         self._fig_title = 't = {0:.2f}, project {1}along {2} direction'.format(self.time, 'absolute value ' if if_abs else '', self._axis_labels_original[dir])
+
+################################method data_center_of_mass2d################################
+    def data_center_of_mass2d(self, dir = 0, if_abs = True, if_square = False, weigh_threshold=0.):
+        '''
+            get a line of the center of mass of a 2D data along "dir" direction.
+            self._data will be transformed to a 1D numpy array.
+        '''
+        if dir not in range (2):
+            raise ValueError('Direction should be 0 or 1!')
+        if 1==dir: weights = self._data
+        else: weights = np.transpose(self._data)
+        if if_square:
+            weights = np.square(weights)
+        if if_abs:
+            weights = np.absolute(weights)
+        #x_mgrid = np.mgrid[self._axis_slices][1-dir]
+        x_mgrid = np.mgrid[self._axis_slices[1-dir]]
+        # Find the bundary of the data region
+        weights_sum = np.sum(weights, axis=1)
+        for i_bund_left in range(weights_sum.shape[0]):
+            if weights_sum[i_bund_left]>weigh_threshold: break
+        if (weights_sum.shape[0]-i_bund_left)<2: raise RuntimeError("Weights are smaller than the threshold. Cannot proceed.")
+        for i_bund_right in range(weights_sum.shape[0], 1, -1):
+            if weights_sum[i_bund_right-1]>weigh_threshold: break
+        center_of_mass_len = i_bund_right-i_bund_left
+        center_of_mass = np.zeros(center_of_mass_len)
+        for i in range(center_of_mass_len):
+            # The weight may still have small values in the range between i_bund_left and i_bund_right
+            if weights_sum[i+i_bund_left]>weigh_threshold: center_of_mass[i] = np.average(x_mgrid, weights=weights[i+i_bund_left])
+        self._data = center_of_mass
+        #print(self._data)
+        whole_slice = self._axis_slices[dir]
+        self._axis_slices = [np.s_[(whole_slice.start+whole_slice.step*i_bund_left):(whole_slice.start+whole_slice.step*i_bund_right):whole_slice.step]]
+        self._axis_labels = [self._axis_labels_original[dir]]
+        self._axis_units = [self._axis_units_original[dir]]
+        self._fig_title = 't = {0:.2f}, centre of mass along {1} direction'.format(self.time, self._axis_labels_original[dir])
 
 ################################method read_data_lineout################################
     def read_data_lineout(self, dir = 0, pos =(0., 0.)):
@@ -703,6 +772,42 @@ class OutFile:
         #plt.xlabel('{0} [{1}]'.format(self._axis_labels[0], self._axis_units[0]))
         #color_bar = plt.colorbar()
         #plt.show()
+
+################################method data_profile1d################################
+    def data_profile1d(self, peak_height_min_ratio=0.00001):
+        '''Turn 1-D high-frequency signal (eg. laser) to its profile.'''
+        if self._data.ndim!=1:
+            raise RuntimeError('Data is not one dimensional! The OutFile.profile1d() method cannot proceed.')
+        self._data = np.abs(self._data)
+        # Longitudinal grid points
+        lon_grid = np.mgrid[self._axis_slices[0]]
+        lon_len_minus1 = len(lon_grid)-1
+        peaks_ind=find_peaks(self._data, height=0.00001*np.average(self._data))[0]
+        # Adding points at the beginning and ending of the peak_ind, preparing for interpolation
+        if 0<peaks_ind[0]: peaks_ind=np.append(0,peaks_ind)
+        if lon_len_minus1>peaks_ind[-1]: peaks_ind=np.append(peaks_ind, lon_len_minus1)
+        self._data = np.interp(lon_grid, lon_grid[peaks_ind], self._data[peaks_ind])
+
+################################method data_profile2d################################
+    def data_profile2d(self, peak_height_min_ratio=0.00001, dir=0):
+        '''Turn 2-D high-frequency signal (eg. laser) to its profile.
+           dir=0 means the high frequency signal is along 0th direction.
+        '''
+        if self._data.ndim!=2:
+            raise RuntimeError('Data is not two dimensional! The OutFile.profile2d() method cannot proceed.')
+        self._data = np.abs(self._data)
+        # Longitudinal grid points
+        lon_grid = np.mgrid[self._axis_slices[dir]]
+        lon_len_minus1 = len(lon_grid)-1
+        abs_avg = np.average(self._data)
+        for transverse_ind in range(self._data.shape[dir]):
+            peaks_ind=find_peaks(self._data[transverse_ind], height=0.00001*abs_avg)[0]
+            if len(peaks_ind)<1: continue
+            # Adding points at the beginning and end of the peak_ind, preparing for interpolation
+            if 0<peaks_ind[0]: peaks_ind=np.append(0,peaks_ind)
+            if lon_len_minus1>peaks_ind[-1]: peaks_ind=np.append(peaks_ind, lon_len_minus1)
+            self._data[transverse_ind] = np.interp(lon_grid, lon_grid[peaks_ind], self._data[transverse_ind, peaks_ind])
+        # not yet finished. Currently this can only work with dir=0.
 
 ################################method plot_data_line################################
     def plot_data_line(self, h_fig=None, h_ax=None, semilogy=False, linestyle='', if_xlabel=True, if_ylabel=True, if_title=True, multiple=1., offset=0.):
@@ -929,7 +1034,7 @@ class OutFile:
 
 ################################method fit_for_W_2d################################
     def fit_for_W_2d(self, h_fig=None, h_ax=None, guess_values=None):
-        '''Do fitting for W. Usually use read_data_project(if_bas=True) to read data absolut value projection along 0th direction before this method.'''
+        '''Do fitting for W. If 'abs' == data_preprocess, use read_data_project(if_abs=True) to read data absolut value projection along 0th direction before this method. If 'square' == data_preprocess, use read_data_project(if_square=True) instead, and fited W should be .'''
         #self.read_data_project(dir = 0, if_abs = True)
         max_value = np.amax(self._data)
         min_value = np.amin(self._data)
@@ -1037,34 +1142,92 @@ class OutFile:
 #not completed
 
 if __name__ == '__main__':
-    out_num=80
+    out_num=1
     def tmp_3D():
-        h_fig = plt.figure(figsize=(10,8))
-        file1 = OutFile(code_name='osiris',path='/home/zming/mnt/os_PT3D18',field_name='charge',average='',spec_name='Ne_eK',out_num=out_num)
-        h_ax = h_fig.add_subplot(221)
+        h_fig = plt.figure(figsize=(5,5))
+        file1 = OutFile(code_name='osiris',path='/home/zming/mnt/JSCRATCH/os_beamDC3D/os_beamDC3D0', field_name='charge', spec_name='driver', out_num=20)
+        h_ax = h_fig.add_subplot(111)
         file1.open()
-        file1.read_data_slice(dir=1)
-        file1.plot_data(h_fig, h_ax, vmax=0., vmin=-1.)
-        h_ax = h_fig.add_subplot(222)
-        file1.read_data_slice(dir=2)
-        file1.plot_data(h_fig, h_ax, vmax=0., vmin=-1.)
-        file1.close()
-        file1.field_name='p1x1'
-        #file1.spec_name='O_eK'
-        h_ax = h_fig.add_subplot(223)
-        file1.open()
-        file1.read_data()
-        file1.plot_data(h_fig, h_ax, if_log_colorbar=True)#, vmax=5., vmin=-5.)
+        file1.read_data_slice()
+        file1.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_higher_range_transparent())
+        h_ax.set_aspect('equal','box')
         file1.close()
 
-        file1.field_name='raw'
-        #file1.spec_name='O_eK'
+        plt.tight_layout()
+        plt.show()
+    def X1plot():
+        h_fig = plt.figure(figsize=(5,5))
+        file1 = OutFile(code_name='osiris',path='/home/zming/mnt/JSCRATCH/X1/scan_2019_12_04/He_Ar_3.0/1.0', field_name='charge', spec_name='plasma', out_num=18)
+        h_ax = h_fig.add_subplot(111)
         file1.open()
-        file1.read_raw_x1()
-        file1.read_raw_p1()
+        file1.read_data_slice(dir=1)
+        file1.plot_data(h_fig, h_ax, cmap='gray', vmin=-0.001, if_colorbar=False)
+        h_ax.set_aspect('equal','box')
         file1.close()
-        h_ax = h_fig.add_subplot(224)
-        h_ax.scatter(file1._raw_x1, file1._raw_p1, s=1, marker='.')
+        file1.spec_name = 'driver'
+        file1.open()
+        file1.read_data_slice(dir=1)
+        file1.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_higher_range_transparent(plt.cm.hot), vmin=-0.002, if_colorbar=False)
+        file1.close()
+        h_ax.set_title(None)
+        h_ax.set_xlabel('z [$\mu$m]')
+        h_ax.set_ylabel('y [$\mu$m]')
+        plt.tight_layout()
+
+        h_fig = plt.figure(figsize=(5,5))
+        file1.out_num = 64
+        file1.spec_name = 'ramp'
+        h_ax = h_fig.add_subplot(111)
+        file1.open()
+        file1.read_data_slice(dir=1)
+        ramp_data = file1._data
+        file1.close()
+        file1.spec_name = 'plasma'
+        file1.open()
+        file1.read_data_slice(dir=1)
+        plasma_data = file1._data
+        #file1._data = np.select([ramp_data>=(-0.0003541), ramp_data<(-0.0003541)],[plasma_data+ramp_data, -0.0003541])
+        file1._data += ramp_data
+        file1.plot_data(h_fig, h_ax, cmap=plt.cm.gray, vmin=-0.001, if_colorbar=False)
+        file1._data = np.select([ramp_data>=(-0.0006), ramp_data<(-0.0006)],[0., ramp_data])
+        file1.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_higher_range_transparent(plt.cm.jet), vmin=-0.002, if_colorbar=False)
+        h_ax.set_aspect('equal','box')
+        file1.close()
+        file1.spec_name = 'driver'
+        file1.open()
+        file1.read_data_slice(dir=1)
+        file1.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_higher_range_transparent(plt.cm.hot, transparency_transition_region=[0.8,0.9]), vmin=-0.002, if_colorbar=False)
+        file1.close()
+        h_ax.set_title(None)
+        h_ax.set_xlabel('z [$\mu$m]')
+        h_ax.set_ylabel('y [$\mu$m]')
+        plt.tight_layout()
+
+        h_fig = plt.figure(figsize=(5,5))
+        file1.out_num = 133
+        file1.spec_name = 'plasma'
+        h_ax = h_fig.add_subplot(111)
+        file1.open()
+        file1.read_data_slice(dir=1)
+        file1.plot_data(h_fig, h_ax, cmap=plt.cm.gray, vmin=-0.001, if_colorbar=False)
+        h_ax.set_aspect('equal','box')
+        file1.close()
+        file1.spec_name = 'ramp'
+        file1.open()
+        file1.read_data_slice(dir=1)
+        file1.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_higher_range_transparent(plt.cm.jet, transparency_transition_region=[0.5,0.6]), vmin=-0.002, if_colorbar=False)
+        h_ax.set_aspect('equal','box')
+        file1.close()
+        file1.spec_name = 'driver'
+        file1.open()
+        file1.read_data_slice(dir=1)
+        file1.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_higher_range_transparent(plt.cm.hot), vmin=-0.002, if_colorbar=False)
+        file1.close()
+        h_ax.set_title(None)
+        h_ax.set_xlabel('z [$\mu$m]')
+        h_ax.set_ylabel('y [$\mu$m]')
+        plt.tight_layout()
+
         plt.show()
     def cyl_m_2D():
         h_fig = plt.figure(figsize=(16.5,11))
@@ -1110,18 +1273,29 @@ if __name__ == '__main__':
         file1.close()
         h_ax.scatter(file1._raw_x1, file1._raw_p1, s=1, marker='.', c='b')
         plt.show(block=True)
-    def tmp_beam3D():
-        file1 = OutFile(path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1_Shared_Pardis_Ming/NegBox/50um600pC1.1e16_test_electron_bunching_yee',field_name='charge',spec_name='plasma',out_num=100)
-        file1.field_name='raw'
+    def scatter():
+        h_fig = plt.figure()
+        h_ax = h_fig.add_subplot(211)
+        file1 = OutFile(path='/home/zming/mnt/JSCRATCH/test_pos_ref_box_compare',field_name='raw',spec_name='driver',out_num=700)
         file1.open()
         file1.read_raw_x1()
-        file1.read_raw_p1()
-        h_fig = plt.figure()
-        h_ax = h_fig.add_subplot(111)
-        h_ax.scatter(file1._raw_x1, file1._raw_p1, s=1, marker='.', c='r')
-        '''file1.read_data_slice()
-        file1.plot_data()'''
+        file1.read_raw_x2()
+        h_ax.scatter(file1._raw_x1, file1._raw_x2, s=1, marker='.', c='r')
+        h_ax.set_ylabel('$x_2$')
+        h_ax.set_title('$t={}$, pos_ref_box off'.format(file1.time))
         file1.close()
+
+        h_ax = h_fig.add_subplot(212)
+        file1.path='/home/zming/mnt/JSCRATCH/test_pos_ref_box'        
+        file1.open()
+        file1.read_raw_x1()
+        file1.read_raw_x2()
+        h_ax.scatter(file1._raw_x1, file1._raw_x2, s=1, marker='.', c='r')
+        h_ax.set_xlabel('$x_1$')
+        h_ax.set_ylabel('$x_2$')
+        h_ax.set_title('$t={}$, pos_ref_box on'.format(file1.time))
+        file1.close()
+        plt.tight_layout()
         plt.show(block=True)
     def select_tag():
         file1 = OutFile(path='/home/zming/mnt/X1_Shared_Pardis_Ming/NegBox/50um600pC1.1e16h',field_name='raw',spec_name='ramp',out_num=20)
@@ -1159,19 +1333,27 @@ if __name__ == '__main__':
         file1.close()
         plt.show()
     def test():
-        file1 = OutFile(code_name='hipace',path='/home/zming/mnt/X1_Shared_Pardis_Ming/NegBox/50um600pC1.1e16hh',field_name='raw',average='',spec_name='driver',use_num_list=True,out_num=0)
-        #file1.open()
-        
-        print(file1.path_filename)
-        file1.out_num=1
-        print(file1.path_filename)
-        file1.out_num=10
-        print(file1.path_filename)
-        #file1.close()
+        file1 = OutFile(code_name='osiris',path='/home/zming/mnt/JSCRATCH/X1/sigma_r_scan_2019_10_22/500pC36um',field_name='raw',spec_name='ramp',out_num=60)
+        file1.open()
+        file1.read_raw_q()
+        file1.read_raw_p1()
+        file1.read_raw_x2()
+        file1.read_raw_p2()
+        file1.read_raw_x3()
+        file1.read_raw_p3()
+        file1.read_raw_ene()
+        ene_avg, ene_rms_spread = file1.raw_mean_rms_ene()
+        emittance, _ =file1.calculate_norm_rms_emittance_um(4.e16, directions=(2,3))
+        print('Q = {} pC'.format(file1.calculate_q_pC(4.e16)))
+        print('E = {} +- {} MeV'.format(ene_avg*0.511, ene_rms_spread*0.511))
+        print('epsilon_x_norm = {} um, epsilon_y_norm = {} um'.format(emittance[0], emittance[1]))
+        file1.close()
+        plt.show()
         
     #test()
-    tracking()
+    #tracking()
     #select_tag()
     #tmp_hipace3D()
-    #tmp_beam3D()
+    #scatter()
     #tmp_3D()
+    X1plot()

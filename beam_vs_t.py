@@ -22,9 +22,9 @@ def get_beam_parameters(outfile_object, n0_per_cc, gamma_threshold, gamma_spread
     outfile_object._raw_q = np.select(condlist, [outfile_object._raw_q])'''
     if 0==len(outfile_object._raw_select_index):
         print("Warning: no particle is selected.")
-        return outfile_object.time, 0.0, [0.0,0.0], 1.0, 00.5
+        return outfile_object.time, 0.0, [0.0,0.0], 1.0, 00.5, [[0.,0.],[0.,0.],[0.,0.]]
     q_pC = outfile_object.calculate_q_pC(n0_per_cc, if_select = True)
-    emittances = outfile_object.calculate_norm_rms_emittance_um(n0_per_cc, (2,3), if_select = True)
+    emittances, Courant_Snyder_parameters = outfile_object.calculate_norm_rms_emittance_um(n0_per_cc, (2,3), if_select = True)
     if "rms"==gamma_spread_method:
         gamma, gamma_spread = outfile_object.raw_mean_rms_ene(if_select = True)
         #raw_mean_rms_ene() returns the ene average. +1 to obtain gamma
@@ -40,7 +40,7 @@ def get_beam_parameters(outfile_object, n0_per_cc, gamma_threshold, gamma_spread
             gamma = 1.
             gamma_spread = 1.
     else: raise NotImplementedError("Method of {} for gamma spread of the beam has not been implemented yet!".format(gamma_spread_method))
-    return outfile_object.time, q_pC, emittances, gamma, gamma_spread
+    return outfile_object.time, q_pC, emittances, gamma, gamma_spread, Courant_Snyder_parameters
 
 def plot_beam_parameters_vs_t(path, species_name, n0_per_cc, code_name='osiris', gamma_threshold=1., use_num_list=False, start=0, count=0, stride=1, t_offset = 0., max_missing_file=0, gamma_spread_method="lfit", h_f=None, charge_abs=False, linestyle='-', label = None):
     '''
@@ -52,6 +52,12 @@ def plot_beam_parameters_vs_t(path, species_name, n0_per_cc, code_name='osiris',
     emittance_y_array = list()
     center_gamma_array = list()
     spread_gamma_array = list()
+    Courant_Snyder_parameter_alpha_x = list()
+    Courant_Snyder_parameter_alpha_y = list()
+    Courant_Snyder_parameter_beta_x = list()
+    Courant_Snyder_parameter_beta_y = list()
+    Courant_Snyder_parameter_gamma_x = list()
+    Courant_Snyder_parameter_gamma_y = list()
     missing_file = 0
     outfile_object = outfile.OutFile(code_name=code_name, path=path, field_name='raw',spec_name=species_name, use_num_list=use_num_list)
     for i in range(start, start+count*stride, stride):
@@ -72,7 +78,7 @@ def plot_beam_parameters_vs_t(path, species_name, n0_per_cc, code_name='osiris',
             else:
                 print('Warning: File missing. Exception message:\n{}'.format(err))
                 continue
-        t, q_pC, emittances, center_gamma, spread_gamma = get_beam_parameters(outfile_object, n0_per_cc, gamma_threshold, gamma_spread_method=gamma_spread_method)
+        t, q_pC, emittances, center_gamma, spread_gamma, Courant_Snyder_parameters = get_beam_parameters(outfile_object, n0_per_cc, gamma_threshold, gamma_spread_method=gamma_spread_method)
         outfile_object.close()
         t_array.append(t+t_offset)
         q_pC_array.append(q_pC)
@@ -80,52 +86,89 @@ def plot_beam_parameters_vs_t(path, species_name, n0_per_cc, code_name='osiris',
         emittance_y_array.append(emittances[1])
         center_gamma_array.append(center_gamma)
         spread_gamma_array.append(spread_gamma)
+        Courant_Snyder_parameter_alpha_x.append(Courant_Snyder_parameters[0][0])
+        Courant_Snyder_parameter_alpha_y.append(Courant_Snyder_parameters[0][1])
+        Courant_Snyder_parameter_beta_x.append(Courant_Snyder_parameters[1][0])
+        Courant_Snyder_parameter_beta_y.append(Courant_Snyder_parameters[1][1])
+        Courant_Snyder_parameter_gamma_x.append(Courant_Snyder_parameters[2][0])
+        Courant_Snyder_parameter_gamma_y.append(Courant_Snyder_parameters[2][1])
     if h_f is None: h_f = plt.figure()
-    h_ax = h_f.add_subplot(231)
+    h_ax = h_f.add_subplot(331)
     if charge_abs: q_pC_array = np.abs(q_pC_array)
     h_ax.plot(t_array, q_pC_array, linestyle = linestyle, label=label)
+    plt.minorticks_on()
     plt.ylim()
     plt.xlabel('t [$\\omega_p$]')
     plt.ylabel('q [pC]')
     if label is not None: plt.legend()
 
-    h_ax = h_f.add_subplot(232)
+    h_ax = h_f.add_subplot(332)
     h_ax.plot(t_array, emittance_x_array, color='k', linestyle = linestyle, label='$\\epsilon_x$')
     h_ax.plot(t_array, emittance_y_array, color='r', linestyle = linestyle, label='$\\epsilon_y$')
     plt.xlabel('t [$\\omega_p$]')
     plt.ylabel('$\epsilon$ [$\mu$m]')
     plt.legend()
+    plt.minorticks_on()
 
-    h_ax = h_f.add_subplot(233)
+    h_ax = h_f.add_subplot(333)
     h_ax.plot(t_array, center_gamma_array, linestyle = linestyle)
     plt.xlabel('t [$\\omega_p$]')
     plt.ylabel('$\\gamma$')
+    plt.minorticks_on()
 
-    h_ax = h_f.add_subplot(234)
+    h_ax = h_f.add_subplot(334)
     h_ax.plot(t_array, spread_gamma_array, linestyle = linestyle)
     plt.xlabel('t [$\\omega_p$]')
     plt.ylabel('$\\Delta \\gamma$')
+    plt.minorticks_on()
 
-    h_ax = h_f.add_subplot(235)
+    h_ax = h_f.add_subplot(335)
     h_ax.plot(t_array, np.divide(spread_gamma_array, center_gamma_array), linestyle = linestyle)
     plt.xlabel('t [$\\omega_p$]')
     plt.ylabel('$\\Delta \\gamma / \\gamma$')
 
     try:
-        h_ax = h_f.add_subplot(236)
+        h_ax = h_f.add_subplot(336)
         outfile_object.plot_raw_hist_gamma(h_f, h_ax, if_select=True, linestyle = linestyle)
+        plt.minorticks_on()
         if t_offset != 0.: h_ax.set_title('$t={0:.2f}$'.format(outfile_object.time+t_offset))
     except Exception as err:
         print("Exception message: {}".format(err))
 
+    # plot Courant_Snyder_parameters
+    h_ax = h_f.add_subplot(337)
+    h_ax.plot(t_array, Courant_Snyder_parameter_alpha_x, color='k', linestyle = linestyle, label='$\\alpha_x$')
+    h_ax.plot(t_array, Courant_Snyder_parameter_alpha_y, color='r', linestyle = linestyle, label='$\\alpha_y$')
+    plt.xlabel('t [$\\omega_p$]')
+    plt.ylabel('Courant Snyder $\\alpha$')
+    plt.minorticks_on()
+    plt.legend()
+
+    h_ax = h_f.add_subplot(338)
+    h_ax.plot(t_array, Courant_Snyder_parameter_beta_x, color='k', linestyle = linestyle, label='$\\beta_x$')
+    h_ax.plot(t_array, Courant_Snyder_parameter_beta_y, color='r', linestyle = linestyle, label='$\\beta_y$')
+    plt.xlabel('t [$\\omega_p$]')
+    plt.ylabel('Courant Snyder $\\beta$ [m]')
+    plt.minorticks_on()
+    plt.legend()
+
+    h_ax = h_f.add_subplot(339)
+    h_ax.plot(t_array, Courant_Snyder_parameter_gamma_x, color='k', linestyle = linestyle, label='$\\gamma_x$')
+    h_ax.plot(t_array, Courant_Snyder_parameter_gamma_y, color='r', linestyle = linestyle, label='$\\gamma_y$')
+    plt.xlabel('t [$\\omega_p$]')
+    plt.ylabel('Courant Snyder $\\gamma$ [$m^{-1}$]')
+    plt.minorticks_on()
+    plt.legend()
 
 if __name__ == '__main__':
-    h_f = plt.figure()
-    plot_beam_parameters_vs_t(code_name='osiris', path='/home/zming/mnt/JSCRATCH/50um600pC1.1e16thh', species_name='ramp', n0_per_cc=1.e16, gamma_threshold=1., start=3, count=775, stride=1, max_missing_file=0, gamma_spread_method="rms", charge_abs=True, h_f=h_f, label='OSIRIS')
-    plot_beam_parameters_vs_t(code_name='hipace', path='/home/zming/mnt/JSCRATCH/50um600pC1.1e16thh', species_name='trailer', n0_per_cc=1.e16, gamma_threshold=1., use_num_list=True, start=0, count=119, stride=1, t_offset=0., max_missing_file=1, gamma_spread_method="rms", h_f=h_f, linestyle='--', label='HiPACE')
-    #plot_beam_parameters_vs_t(code_name='osiris', path='/home/zming/simulations/os2D/os_DRI3D19', species_name='plasma', n0_per_cc=4.0e16, gamma_threshold=10., start=33, count=999, stride=1)
+    h_f = plt.figure(figsize=(10,10))
+    #plot_beam_parameters_vs_t(code_name='hipace', use_num_list=True, path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1_Shared_Pardis_Ming/50um600pC1.1e16thh_mmtppc', species_name='trailer', n0_per_cc=1.e16, gamma_threshold=1., start=0, count=99999, stride=1, gamma_spread_method="rms", charge_abs=True, h_f=h_f, label='Page 6')
+    #plot_beam_parameters_vs_t(code_name='hipace', use_num_list=True, path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1_Shared_Pardis_Ming/50um600pC1.1e16th_md', species_name='trailer', n0_per_cc=1.e16, gamma_threshold=1., start=0, count=99999, stride=1, t_offset=0., max_missing_file=1, gamma_spread_method="rms", charge_abs=True, h_f=h_f, linestyle='--', label='Page 7')
+    #plot_beam_parameters_vs_t(code_name='hipace', use_num_list=True, path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1_Shared_Pardis_Ming/50um600pC1.1e16th_mdmt', species_name='trailer', n0_per_cc=1.e16, gamma_threshold=1., start=0, count=99999, stride=1, t_offset=0., max_missing_file=1, gamma_spread_method="rms", charge_abs=True, h_f=h_f, linestyle=':', label='Page 8')
+    plot_beam_parameters_vs_t(code_name='osiris', path='/home/zming/mnt/JSCRATCH/X1/scan_2019_12_05/He_Ar_3.0/1.5', species_name='driver', n0_per_cc=2.824e19, gamma_threshold=1., start=0, count=999, stride=1, gamma_spread_method="rms", charge_abs=True, h_f=h_f, label='driver')
+    plot_beam_parameters_vs_t(code_name='osiris', path='/home/zming/mnt/JSCRATCH/X1/scan_2019_12_05/He_Ar_3.0/1.5', species_name='ramp', n0_per_cc=2.824e19, gamma_threshold=1., start=60, count=999, stride=1, gamma_spread_method="rms", charge_abs=True, h_f=h_f, linestyle='--', label='ramp')
     #plot_beam_parameters_vs_t(code_name='osiris', path='/home/zming/mnt/os_PT3D20', species_name='Ne_eK', n0_per_cc=2.43e18, gamma_threshold=50., start=10, count=999, stride=1)
-    #plot_beam_parameters_vs_t(code_name='osiris', path='/home/zming/mnt/os_PT3D22', species_name='e', n0_per_cc=5.e17, gamma_threshold=50., start=8, count=999, stride=1)
+    #plot_beam_parameters_vs_t(path='/home/zming/mnt/JSCRATCH/os_PT3D27', species_name='plasma', n0_per_cc=4.4e17, gamma_threshold=10., start=2, count=999, stride=1)
     #plot_beam_parameters_vs_t(code_name='osiris', path='/home/zming/mnt/JSCRATCH/os_beam3D142', species_name='He_e', n0_per_cc=4.9e16, gamma_threshold=1., start=15, count=999, stride=1)
     #plot_beam_parameters_vs_t(code_name='hipace', path='/home/zming/simulations/os2D/X1_Shared_Pardis_Ming/NegBox/50um600pC1.1e16', species_name='trailer', n0_per_cc=1.0e16, gamma_threshold=1., start=0, count=999, stride=20)
     plt.tight_layout()
