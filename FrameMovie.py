@@ -5,11 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 class Frames:
-<<<<<<< HEAD
     def __init__(self, code_name = 'osiris', simulation_path = None, frame_folder = 'Frames', plot_type = 'laser_driven', plot_spec_name=None, average='', use_num_list = False, start_num = 0, stride_num=1, count_num=1, driver_spec_name='driver', driver_vmin=None, driver_vmax=None, background_spec_name='e', background_vmin=None, background_vmax=None, trail_spec_name=None, trail_vmin=None, trail_vmax=None, if_e1=False, e1_multiple=1., if_psi=False, psi_multiple=1., if_driver_cm=False, if_trail_cm=False, dir=2, save_type='png', max_missing_file=0):
-=======
-    def __init__(self, code_name = 'osiris', simulation_path = None, frame_folder = 'Frames', plot_type = 'laser_driven', plot_spec_name=None, average='', use_num_list = False, start_num = 0, stride_num=1, count_num=1, driver_spec_name='driver', driver_vmin=None, driver_vmax=None, background_spec_name='e', background_vmin=None, background_vmax=None, trail_spec_name=None, trail_vmin=None, trail_vmax=None, if_e1=False, if_psi=False, if_driver_cm=False, if_trail_cm=False, dir=2, save_type='png', max_missing_file=0):
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
         self.code_name = code_name
         self.simulation_path = simulation_path
         self.frame_path = simulation_path+'/'+frame_folder
@@ -31,13 +27,9 @@ class Frames:
         self.trail_vmin = trail_vmin
         self.trail_vmax = trail_vmax
         self.if_e1 = if_e1
-<<<<<<< HEAD
         self.e1_multiple = e1_multiple
         self.if_psi = if_psi
         self.psi_multiple = psi_multiple
-=======
-        self.if_psi = if_psi
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
         # if_driver_cm = True means plot the lineout of driver beam center of mass in the beam driven case
         self.if_driver_cm = if_driver_cm
         # if_trail_cm = True means plot the lineout of trail beam center of mass
@@ -71,14 +63,9 @@ class Frames:
 
     def set_frame_path(self, value):
         tmp_path = os.path.abspath(value)
-<<<<<<< HEAD
         head, _ = os.path.split(tmp_path)
         head_of_head, _ = os.path.split(head)
         if os.path.isdir(head_of_head):
-=======
-        head, tail = os.path.split(tmp_path)
-        if os.path.isdir(head):
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
             if os.path.isfile(tmp_path):
                 raise IOError('\'{0}\' is a file! Use a empty folder instead.'.format(tmp_path))
             elif os.path.isdir(tmp_path):
@@ -89,11 +76,7 @@ class Frames:
                 os.makedirs(tmp_path)
             self._frame_path = tmp_path
         else:
-<<<<<<< HEAD
             raise IOError('The parent dir \'{0}\' does not exist!'.format(head_of_head))
-=======
-            raise IOError('The parent dir \'{0}\' does not exist!'.format(head))
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
 
     frame_path = property(get_frame_path, set_frame_path)
 
@@ -191,22 +174,14 @@ class Frames:
             self.outfile.field_name='e1'
             self.outfile.open()
             self.outfile.read_data_lineout()
-<<<<<<< HEAD
             self.outfile.plot_data(h_fig, h_ax, linestyle='-r', if_ylabel=False, multiple=self.e1_multiple)
-=======
-            self.outfile.plot_data(h_fig, h_ax, linestyle='-r', if_ylabel=False, multiple=1)
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
             self.outfile.close()
 
         if self.if_psi:
             self.outfile.field_name='psi'
             self.outfile.open()
             self.outfile.read_data_lineout()
-<<<<<<< HEAD
             self.outfile.plot_data(h_fig, h_ax, linestyle='-b', if_ylabel=False, multiple=self.psi_multiple)
-=======
-            self.outfile.plot_data(h_fig, h_ax, linestyle='-b', if_ylabel=False, multiple=1)
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
             self.outfile.close()
 
         plt.tight_layout()
@@ -323,7 +298,6 @@ class Frames:
 
 if __name__ == '__main__':
     #frame1 = Frames(code_name = 'hipace', simulation_path = '/home/zming/mnt/JSCRATCH/50um600pC1.1e16thh', frame_folder='hi_Frames/Frames2_cm', plot_type = 'beam_driven', use_num_list = True, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma_electrons', background_vmin=-5, driver_spec_name='driver', driver_vmin=-20, trail_spec_name='trailer', trail_vmax=0., trail_vmin=-40., if_e1=False, if_psi=False, if_driver_cm=True, if_trail_cm=True, max_missing_file=2, dir=2)
-<<<<<<< HEAD
     #frame1 = Frames(code_name = 'hipace', simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1/scan_2020_1_29_driver_profile_scan/density0.6/zc1_1_hi0.1den_renorm', frame_folder='hi_Frames/slice_x-z', plot_type = 'beam_driven', use_num_list = True, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma_charge', background_vmax=0., background_vmin=-1e1, driver_spec_name='beam_charge', driver_vmin=-1e2, if_e1=True, e1_multiple=1e1, if_psi=False, dir=2)
     #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/simulations/os2D/os_DRI3D19', frame_folder='x3p3', plot_type = 6, start_num = 37, stride_num=1, count_num=99999, trail_spec_name='plasma')
     #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/simulations/os2D/os_DRI3D19', frame_folder='Frames1', plot_type = 0, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-10, driver_spec_name='beam-driver', driver_vmin=-5, if_e1=True, if_psi=False, dir=1)
@@ -334,16 +308,5 @@ if __name__ == '__main__':
     #frame1 = Frames(code_name = 'hipace', simulation_path = '/home/zming/mnt/JSCRATCH/50um600pC1.1e16th_mdmt_cold', frame_folder='hi_Frames/slice_y_z', plot_type = 'beam_driven', plot_spec_name = 'driver', use_num_list = True, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma_electrons', background_vmin=-10, driver_spec_name='driver', driver_vmin=-10, trail_spec_name='trailer', trail_vmax=0, trail_vmin=-30, if_driver_cm=True, if_trail_cm=True, dir=1)
     #frame1 = Frames(simulation_path = '/home/zming/mnt/JSCRATCH/os_beam3D/os_beam3D157', frame_folder='os_Frames/slice_x-z', plot_type = 'beam_driven', start_num = 13, stride_num=1, count_num=99999, background_spec_name='e', background_vmin=-5, driver_spec_name='driver', driver_vmin=-10, trail_spec_name='He_e', trail_vmax=0., trail_vmin=-2., if_e1=True, if_psi=True, dir=2)
     frame1 = Frames(code_name = 'osiris', simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_pond_scatter3D1', frame_folder='os_Frames/slice_x_z', plot_type = 'laser_driven', start_num = 0, stride_num=1, count_num=99999, background_spec_name='e', background_vmin=-2., dir=2)
-=======
-    #frame1 = Frames(simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1_Shared_Pardis_Ming/50um600pC1.1e16th_mdmt', frame_folder='os_Frames/Frames2_cm', plot_type = 'beam_driven', start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-5, driver_spec_name='driver', driver_vmin=-20, trail_spec_name='ramp', trail_vmax=0., trail_vmin=-40., if_e1=False, if_psi=False, if_driver_cm=True, if_trail_cm=True, dir=2)
-    #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/simulations/os2D/os_DRI3D19', frame_folder='x3p3', plot_type = 6, start_num = 37, stride_num=1, count_num=99999, trail_spec_name='plasma')
-    #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/simulations/os2D/os_DRI3D19', frame_folder='Frames1', plot_type = 0, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-10, driver_spec_name='beam-driver', driver_vmin=-5, if_e1=True, if_psi=False, dir=1)
-    #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/simulations/os2D/os_DRI3D19', frame_folder='p1x1', plot_type = 2, start_num = 16, stride_num=1, count_num=99999, trail_spec_name='plasma')
-    #frame1 = Frames(simulation_path = '/home/zming/mnt/JSCRATCH/os_PT3D27', frame_folder='Frames/p1x1', plot_type = 'p1x1', start_num = 1, stride_num=1, count_num=99999, trail_spec_name='plasma')
-    #frame1 = Frames(simulation_path = '/home/zming/mnt/JSCRATCH/os_PT3D27', frame_folder='Frames/laser_profile_slice_x-z', plot_type = 'laser_driven', average='-savg', start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-5., trail_spec_name=None, if_e1=False, if_psi=False, dir=2)
-    frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/mnt/JSCRATCH/X1/scan_2019_12_05/He_Ar_3.0/0.5', frame_folder='os_Frames/slice_x_z', plot_type = 'beam_driven', plot_spec_name = 'driver' , start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-0.002, driver_spec_name='driver', driver_vmin=-0.005, trail_spec_name='ramp', trail_vmax=0, trail_vmin=-0.002, if_driver_cm=True, if_trail_cm=True, dir=2)
-    #frame1 = Frames(code_name = 'hipace', simulation_path = '/home/zming/mnt/JSCRATCH/50um600pC1.1e16th_mdmt_cold', frame_folder='hi_Frames/slice_y_z', plot_type = 'beam_driven', plot_spec_name = 'driver', use_num_list = True, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma_electrons', background_vmin=-10, driver_spec_name='driver', driver_vmin=-10, trail_spec_name='trailer', trail_vmax=0, trail_vmin=-30, if_driver_cm=True, if_trail_cm=True, dir=1)
-    #frame1 = Frames(simulation_path = '/home/zming/mnt/JSCRATCH/os_beamDC3D/os_beamDC3D0', frame_folder='os_Frames/slice_x-z', plot_type = 'beam_driven', plot_spec_name = 'ramp', start_num = 0, stride_num=1, count_num=99999, background_spec_name='e', background_vmin=-5, driver_spec_name='driver', driver_vmin=-10, trail_spec_name='He_e', trail_vmax=0., trail_vmin=-2., if_e1=True, if_psi=True, dir=2)
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
     frame1.save_frames()
     #frame1.make_movie()
