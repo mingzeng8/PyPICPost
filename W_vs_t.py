@@ -3,7 +3,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
+<<<<<<< HEAD
+def get_W_vs_t(path, field_name='e3', species_name='', average='', cyl_m='False', start=0, count=0, stride=1, data_preprocess = 'abs'):
+=======
 def get_W_vs_t(path, field_name='e3', species_name='', average='', cyl_m='False', start=0, count=0, stride=1):
+>>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
     '''Plot the W evolution'''
     if not isinstance(path, str):
         raise TypeError('The path should be a string!')
@@ -39,8 +43,19 @@ def get_W_vs_t(path, field_name='e3', species_name='', average='', cyl_m='False'
             except IOError:
                 print('Warning: unable to open file \'{0}\'. Iteration breaks.'.format(os_file.path_filename))
                 break
+<<<<<<< HEAD
+            if 'abs' == data_preprocess: os_file.read_data_project(if_abs = True)
+            elif 'square' == data_preprocess: os_file.read_data_project(if_square = True)
+            else: raise ValueError('data_preprocess should be either \'abs\' or \'square\'!')
+            popt, h_fig, h_ax = os_file.fit_for_W(guess_values=popt)
+            if 'square' == data_preprocess:
+                # if E field is squared instead of absoluted, the actual W is sqrt(2) times larger
+                os_file._W = os_file._W * np.sqrt(2)
+                os_file._a = np.sqrt(os_file._a)
+=======
             os_file.read_data_project(if_abs = True)
             popt, h_fig, h_ax = os_file.fit_for_W(guess_values=popt)
+>>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
             W_array.append(os_file._W)
             t_array.append(os_file.time)
             a_array.append(os_file._a)
@@ -75,7 +90,11 @@ if __name__ == '__main__':
         average='-savg'
     else:
         average=''
+<<<<<<< HEAD
+    parent_folder='/home/zming/mnt/JSCRATCH/'
+=======
     parent_folder='/home/zming/mnt/'
+>>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
     prefix='os_PT3D'
     #prefix='os_laser3D'
     print('Working on '+prefix+fnum+'...')
@@ -89,7 +108,11 @@ if __name__ == '__main__':
     except:
         start_ind=0
         print("File {} does not exist. Calculate from the beginning.".format(data_save_name))
+<<<<<<< HEAD
+    data_new = get_W_vs_t(parent_folder+prefix+fnum, 'e3', average=average, cyl_m=parser.parse_args().cyl_m, start=start_ind, count=600, stride=1, data_preprocess = 'square')
+=======
     data_new = get_W_vs_t(parent_folder+prefix+fnum, 'e3', average=average, cyl_m=parser.parse_args().cyl_m, start=start_ind, count=600, stride=1,)
+>>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
     data_new = np.array(data_new)
     try:
         data_new=np.concatenate((data_old,data_new))
