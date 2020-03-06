@@ -775,7 +775,7 @@ class OutFile:
                     pos_index[i] = 0
             new_shape = self.fileid[self._data_name_in_file].shape[dir]
             pos_index.insert(dir, slice(None, None, None))
-            # Do no flip for OSIRIS
+            # Do no flip for HiPACE
             slice_tuple = tuple(pos_index)
         self._data = np.zeros(new_shape, dtype=float_type)
         self.fileid[self._data_name_in_file].read_direct(self._data, source_sel=slice_tuple)
