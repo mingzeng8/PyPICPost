@@ -187,13 +187,9 @@ class OutFile:
                 # Changed according to new HiPACE
                 self._prefix_filename = '{0}/density_{1}_'.format(main_folder_path, self.spec_name)
             elif 'FLD' == self._out_type:
-<<<<<<< HEAD
                 # HiPACE has different field names
                 hi_fld_dict = {'e1':'Ez', 'e2':'Ex', 'e3':'Ey'}
                 self._prefix_filename = '{0}/field_{1}_'.format(main_folder_path, hi_fld_dict[self.field_name])
-=======
-                self._prefix_filename = '{0}/field_{1}_'.format(main_folder_path, self.field_name)
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
             elif 'RAW' == self._out_type:
                 self._prefix_filename = '{0}/raw_{1}_'.format(main_folder_path, self.spec_name)
         else:
@@ -468,7 +464,6 @@ class OutFile:
     def calculate_q_pC(self, n0_per_cc, if_select = False):
         '''
         n0_per_cc: reference density in simulation, in unit of per centimeter cube
-<<<<<<< HEAD
         when if_select = True, only calculate the selected macro particles according to self._raw_select_index.
         The formula for charge in pC: Q[pC] = sum_q*n0*V_cell_norm*k0**-3*e_charge*10**12
         and k0=(4*pi*r_e*n0)**0.5, where r_e is classical electron radius.
@@ -477,11 +472,6 @@ class OutFile:
         e_charge*(4pi*r_e)**-1.5*10**12 = 24043512116.12064
         or (4pi*r_e)**-1.5*10**12 = 1.5006780029105165e+29
         Finally Q[pC] = sum_q*V_cell_norm/n0**0.5*24043512116.12064
-=======
-        one_over_k0_um: one over k0, in unit of micrometer
-        one_over_k0_um = (3.541e-20*n0_per_cc)^-0.5
-        when if_select = True, only calculate the selected macro particles according to self._raw_select_index.
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
         '''
         q_array = self._raw_q
         if if_select:
@@ -497,11 +487,7 @@ class OutFile:
             cell_volume_norm = cell_volume_norm*self._cell_size[i]
         if 3>self.num_dimensions:
             print('Warning! Similation is in {} dimensional. Charge calculation may not be correct.'.format(self.num_dimensions))
-<<<<<<< HEAD
         return np.sum(q_array)*cell_volume_norm/np.sqrt(n0_per_cc)*24043512116.12064
-=======
-        return np.sum(q_array)*e_charge*cell_volume_norm/np.sqrt(n0_per_cc)*1.5e29
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
 
 ################################method calculate_norm_rms_emittance_um################################
 # calculate the normalized rms emittance in unit of micrometer radian
@@ -512,20 +498,12 @@ class OutFile:
         '''
         n0_per_cc: reference density in simulation, in unit of per centimeter cube
         one_over_k0_um: one over k0, in unit of micrometer
-<<<<<<< HEAD
         one_over_k0_um = (4pi*r_e_in_um*n0_per_cc*10^-12)^-0.5 = (3.541e-20*n0_per_cc)^-0.5
-=======
-        one_over_k0_um = (3.541e-20*n0_per_cc)^-0.5
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
         when if_select = True, only calculate the selected macro particles according to self._raw_select_index.
         return: 2 elements. The first is normalized emittance list in each of the given directions. The second is a list of 3 elements: the 3 Courant-Snyder parameters in each of the given directions.
         return all 0 if no particle is selected.
         '''
-<<<<<<< HEAD
         one_over_k0_um_square = 2.8239587227915743e19/n0_per_cc
-=======
-        one_over_k0_um_square = 1./(3.541e-20*n0_per_cc)
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
         one_over_k0_mm = np.sqrt(one_over_k0_um_square)/1.e3
         norm_emittances=np.zeros(len(directions))
 
@@ -673,14 +651,10 @@ class OutFile:
 
 ################################method data_project3d################################
     def data_project3d(self, dir = 0, if_abs = False, if_square = False):
-<<<<<<< HEAD
         '''dir is the direction the summation is taking through.
            Currently the project dir is correct for OSIRIS (column-major order, as Fortran).
            For HiPACE, it's row-major order (as c), so need different slicing of the matrix.
         '''
-=======
-        '''dir is the direction the summation is taking through'''
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
         if dir not in range (3):
             raise ValueError('Project direction should be 0, 1 or 2!')
         if if_abs:
@@ -695,14 +669,10 @@ class OutFile:
 
 ################################method data_project2d################################
     def data_project2d(self, dir = 0, if_abs = False, if_square = False):
-<<<<<<< HEAD
         '''dir is the direction the summation is taking through.
            Currently the project dir is correct for OSIRIS (column-major order, as Fortran).
            For HiPACE, it's row-major order (as c), so need different slicing of the matrix.
         '''
-=======
-        '''dir is the direction the summation is taking through'''
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
         if dir not in range (2):
             raise ValueError('Project direction should be 0 or 1!')
         if if_abs:
@@ -752,7 +722,6 @@ class OutFile:
         self._fig_title = 't = {0:.2f}, centre of mass along {1} direction'.format(self.time, self._axis_labels_original[dir])
 
 ################################method read_data_lineout################################
-<<<<<<< HEAD
     def read_data_lineout(self, dir = 0, pos = None):
         '''
            Read lineout of the data and save to self._data. Also modify self._axis_slices, self._axis_labels, self._axis_units and self._fig_title.
@@ -764,15 +733,10 @@ class OutFile:
            For OSIRIS, the axes of data matrix is [2, 1, 0], or [y, x, z].
            For HiPACE, the axes of data matrix is [0, 1, 2], or [z, x, y].
         '''
-=======
-    def read_data_lineout(self, dir = 0, pos =(0., 0.)):
-        '''dir is the lineout direction'''
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
         if 2 > self._num_dimensions:
             raise RuntimeError('Method OutFile.read_data_lineout() cannot work on data with dimension number < 2!')
         if dir not in range(self._num_dimensions):
             raise ValueError('Lineout direction should be in range({0})!'.format(self._num_dimensions))
-<<<<<<< HEAD
         # box_info_array contains the information of the lower boundary position, cell size and upper boundary position in the directions except the dir direction.
         box_info_array = np.array([[self._axis_range[0, i], self._cell_size[i], self._axis_range[1, i],] for i in range(self._num_dimensions) if i!=dir])
         if pos is None:
@@ -814,25 +778,6 @@ class OutFile:
             # Do no flip for HiPACE
             slice_tuple = tuple(pos_index)
         self._data = np.zeros(new_shape, dtype=float_type)
-=======
-        #get the index of the nearest grid. +0.5 here has a similar effect of rounding.
-        tmp_array = np.transpose(np.array([[self._axis_range[0, i], self._cell_size[i]] for i in range(self._num_dimensions) if i!=dir]))
-        #bug occurs here if without [:self._num_dimensions-1]: pos_index has two elements, but it is expected to have only one. Now fixed!
-        pos_index = ((np.array(pos[:self._num_dimensions-1]) - tmp_array[0, :]) / tmp_array[1, :] + 0.5).astype(np.int, copy=False)
-        pos_index = pos_index.tolist()
-        tmp_len = [self.fileid[self._data_name_in_file].shape[self._num_dimensions-1-i] for i in range(self._num_dimensions) if i!=dir]
-        for i in range(self._num_dimensions-1):
-            if tmp_len[i]<=pos_index[i]:
-                print('Warning: pos[{0}] is larger than the upper bundary! Force slicing at the upper bundary.'.format(i))
-                pos_index[i] = tmp_len[i]-1
-            elif 0>pos_index[i]:
-                print('Warning: pos[{0}] is smaller than the lower bundary! Force slicing at the lower bundary.'.format(i))
-                pos_index[i] = 0
-        new_shape = self.fileid[self._data_name_in_file].shape[self._num_dimensions-1-dir]
-        self._data = np.zeros(new_shape, dtype=float_type)
-        pos_index.insert(dir, slice(None, None, None))
-        slice_tuple = tuple(pos_index)[::-1]
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
         self.fileid[self._data_name_in_file].read_direct(self._data, source_sel=slice_tuple)
         self._axis_slices = [slice(self._axis_range[0, dir], self._axis_range[1, dir], self._cell_size[dir]),]#this can be simplified to self._axis_slices = [self._axis_slices[dir],] but bug test is required
         self._axis_labels = [self._axis_labels_original[dir],]
@@ -1125,13 +1070,9 @@ class OutFile:
     def plot_data(self, *args, **kwargs):
         '''Automatically detect the dimension of data and choose the proper plot method'''
         plot_methods = (self.plot_data_line, self.pcolor_data_2d)
-<<<<<<< HEAD
         h_fig, h_ax = plot_methods[self._data.ndim-1](*args, **kwargs)
         h_ax.minorticks_on()
         return h_fig, h_ax
-=======
-        return plot_methods[self._data.ndim-1](*args, **kwargs)
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
 
 ################################method fit_for_W################################
     def fit_for_W(self, *args, **kwargs):
@@ -1231,11 +1172,7 @@ class OutFile:
         if self._data.ndim!=1:
             raise RuntimeError('Data is not one dimensional! The OutFile.zero_poin() method cannot proceed.')
         if np.sign(self._data[start])*np.sign(self._data[stop])>0:
-<<<<<<< HEAD
             raise RuntimeError('self._data[start] and self._data[stop] have the same sign! The OutFile.zero_poin() method cannot take a zero point between them.')
-=======
-            raise RuntimeError('self._data[start] andself._data[stop] have the same sign! The OutFile.zero_poin() method cannot take a zero point between them.')
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
         ind1 = start
         ind2 = stop
         while ind2-ind1 > 1:
@@ -1250,18 +1187,12 @@ class OutFile:
         y1 = self._data[ind1]
         y2 = self._data[ind2]
         return (x1*y2-x2*y1)/(y2-y1)
-<<<<<<< HEAD
 
 # Examples and tests
-=======
-#not completed
-
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
 if __name__ == '__main__':
     out_num=1
     def tmp_3D():
         h_fig = plt.figure(figsize=(5,5))
-<<<<<<< HEAD
         file1 = OutFile(code_name='osiris',path='/home/zming/mnt/JSCRATCH/X1/scan_2020_1_14/He_Ar_2.0/1.0', field_name='charge', spec_name='plasma', out_num=64)
         h_ax = h_fig.add_subplot(111)
         file1.open()
@@ -1274,15 +1205,6 @@ if __name__ == '__main__':
         file1._data +=tmp_data
         file1.plot_data(h_fig, h_ax, vmin=-0.001)#, cmap=my_cmap.cmap_higher_range_transparent())
         h_ax.set_aspect('equal','box')
-=======
-        file1 = OutFile(code_name='osiris',path='/home/zming/mnt/JSCRATCH/os_beamDC3D/os_beamDC3D0', field_name='charge', spec_name='driver', out_num=20)
-        h_ax = h_fig.add_subplot(111)
-        file1.open()
-        file1.read_data_slice()
-        file1.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_higher_range_transparent())
-        h_ax.set_aspect('equal','box')
-        file1.close()
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
 
         plt.tight_layout()
         plt.show()
@@ -1406,7 +1328,6 @@ if __name__ == '__main__':
         plt.show(block=True)
     def scatter():
         h_fig = plt.figure()
-<<<<<<< HEAD
         h_ax1 = h_fig.add_subplot(211)
         h_ax2 = h_fig.add_subplot(212)
         file1 = OutFile(path='/home/zming/mnt/JSCRATCH/os_beam3D/os_beam3D143',field_name='raw',spec_name='driver',out_num=40)
@@ -1438,28 +1359,6 @@ if __name__ == '__main__':
         h_ax2.set_xlabel('$x_1$')
         h_ax2.set_ylabel('$x_3$')
         h_ax2.set_title('$t={}$'.format(file1.time))
-=======
-        h_ax = h_fig.add_subplot(211)
-        file1 = OutFile(path='/home/zming/mnt/JSCRATCH/test_pos_ref_box_compare',field_name='raw',spec_name='driver',out_num=700)
-        file1.open()
-        file1.read_raw_x1()
-        file1.read_raw_x2()
-        h_ax.scatter(file1._raw_x1, file1._raw_x2, s=1, marker='.', c='r')
-        h_ax.set_ylabel('$x_2$')
-        h_ax.set_title('$t={}$, pos_ref_box off'.format(file1.time))
-        file1.close()
-
-        h_ax = h_fig.add_subplot(212)
-        file1.path='/home/zming/mnt/JSCRATCH/test_pos_ref_box'        
-        file1.open()
-        file1.read_raw_x1()
-        file1.read_raw_x2()
-        h_ax.scatter(file1._raw_x1, file1._raw_x2, s=1, marker='.', c='r')
-        h_ax.set_xlabel('$x_1$')
-        h_ax.set_ylabel('$x_2$')
-        h_ax.set_title('$t={}$, pos_ref_box on'.format(file1.time))
-        file1.close()
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
         plt.tight_layout()
         plt.show(block=True)
     def select_tag():
@@ -1497,7 +1396,6 @@ if __name__ == '__main__':
         #file1.plot_tracks(mwin_v = 1., mwin_t_offset = 32.3)
         file1.close()
         plt.show()
-<<<<<<< HEAD
     def oblique_laser_2D():
         h_fig = plt.figure(figsize=(5,5))
         file1 = OutFile(code_name='osiris',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_oblique_laser_test2D3', field_name='e3', spec_name='plasma', out_num=12)
@@ -1588,10 +1486,6 @@ if __name__ == '__main__':
         plt.show()
     def beam_measure():
         file1 = OutFile(code_name='osiris',path='/home/zming/mnt/JSCRATCH/X1/scan_2019_12_05/He_Ar_3.0/3.0',field_name='raw',spec_name='driver',out_num=150)
-=======
-    def test():
-        file1 = OutFile(code_name='osiris',path='/home/zming/mnt/JSCRATCH/X1/sigma_r_scan_2019_10_22/500pC36um',field_name='raw',spec_name='ramp',out_num=60)
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
         file1.open()
         file1.read_raw_q()
         file1.read_raw_p1()
@@ -1600,22 +1494,15 @@ if __name__ == '__main__':
         file1.read_raw_x3()
         file1.read_raw_p3()
         file1.read_raw_ene()
-<<<<<<< HEAD
         #file1.select_raw_data(ene_low=2199.)
         ene_avg, ene_rms_spread = file1.raw_mean_rms_ene(if_select=True)
         emittance, twiss_parameters =file1.calculate_norm_rms_emittance_um(2.824e19, directions=(2,3), if_select=True)
         file1.plot_raw_hist2D(dims='p1x1', if_select=True, if_log_colorbar=True)
         print('Q = {} pC'.format(file1.calculate_q_pC(2.824e19, if_select=True)))
-=======
-        ene_avg, ene_rms_spread = file1.raw_mean_rms_ene()
-        emittance, _ =file1.calculate_norm_rms_emittance_um(4.e16, directions=(2,3))
-        print('Q = {} pC'.format(file1.calculate_q_pC(4.e16)))
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
         print('E = {} +- {} MeV'.format(ene_avg*0.511, ene_rms_spread*0.511))
         print('epsilon_x_norm = {} um, epsilon_y_norm = {} um'.format(emittance[0], emittance[1]))
         file1.close()
         plt.show()
-<<<<<<< HEAD
     def test_os():
         file1 = OutFile(code_name='osiris',path='/home/zming/mnt/JSCRATCH/os_beam3D/os_beam3D155',field_name='e1',out_num=60)
         file1.open()
@@ -1636,18 +1523,10 @@ if __name__ == '__main__':
     #beam_measure()
     #beam_measure_hi()
     #beam_measure_beam3D()
-=======
-        
-    #test()
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
     #tracking()
     #select_tag()
     #tmp_hipace3D()
     #scatter()
     #tmp_3D()
-<<<<<<< HEAD
     #X1plot()
     #oblique_laser_3D()
-=======
-    X1plot()
->>>>>>> 1f5353324d502d91ec31b6ae2828785daf39a589
