@@ -5,20 +5,44 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 class Frames:
-    def __init__(self, simulation_path, frame_folder, dirver_type = 0, start_num = 0, stride_num=1, count_num=1, dirver_spec_name='driver', background_spec_name='e', trail_spec_name=None, if_e1=False, if_psi=False, dir=2, save_type='png'):
+    def __init__(self, code_name = 'osiris', simulation_path = None, frame_folder = 'Frames', plot_type = 'laser_driven', plot_spec_name=None, average='', use_num_list = False, start_num = 0, stride_num=1, count_num=1, driver_spec_name='driver', driver_vmin=None, driver_vmax=None, background_spec_name='e', background_vmin=None, background_vmax=None, trail_spec_name=None, trail_vmin=None, trail_vmax=None, if_e1=False, e1_multiple=1., if_psi=False, psi_multiple=1., if_driver_cm=False, if_trail_cm=False, dir=2, save_type='png', max_missing_file=0):
+        self.code_name = code_name
         self.simulation_path = simulation_path
         self.frame_path = simulation_path+'/'+frame_folder
+        # when use_num_list is True, scan the folder and generate a list of all available fils.
+        self.use_num_list = use_num_list
         self.start_num = start_num
         self.stride_num = stride_num
         self.count_num = count_num
-        self.dirver_type = dirver_type
-        self.dirver_spec_name = dirver_spec_name
+        self.plot_type = plot_type
+        # For phasespace plots, i.e. plot_type = 'p1x1' or so on, one has to give plot_spec_name
+        self.plot_spec_name = plot_spec_name
+        self.driver_spec_name = driver_spec_name
+        self.driver_vmin = driver_vmin
+        self.driver_vmax = driver_vmax
         self.background_spec_name = background_spec_name
+        self.background_vmin = background_vmin
+        self.background_vmax = background_vmax
         self.trail_spec_name = trail_spec_name
+        self.trail_vmin = trail_vmin
+        self.trail_vmax = trail_vmax
         self.if_e1 = if_e1
+        self.e1_multiple = e1_multiple
         self.if_psi = if_psi
+        self.psi_multiple = psi_multiple
+        # if_driver_cm = True means plot the lineout of driver beam center of mass in the beam driven case
+        self.if_driver_cm = if_driver_cm
+        # if_trail_cm = True means plot the lineout of trail beam center of mass
+        self.if_trail_cm = if_trail_cm
         self.dir = dir
         self.save_type = save_type
+        #allowed number of missing files when doing plot loop. In HiPACE sometimes there are missing output files.
+        self.max_missing_file = max_missing_file
+        # Initialize outfile object, especially initialize avail_num_list if use_num_list.
+        if ('beam_driven' == self.plot_type) or ('laser_driven' == self.plot_type):
+            self.outfile = outfile.OutFile(code_name = code_name, path=simulation_path, field_name='charge', average=average, spec_name=background_spec_name, use_num_list = use_num_list, out_num=start_num)
+        else:
+            self.outfile = outfile.OutFile(code_name = code_name, path=simulation_path, field_name='raw', spec_name=plot_spec_name, use_num_list = use_num_list, out_num=start_num)
 
 ################################property simulation_path################################
     def get_simulation_path(self):
@@ -39,8 +63,9 @@ class Frames:
 
     def set_frame_path(self, value):
         tmp_path = os.path.abspath(value)
-        head, tail = os.path.split(tmp_path)
-        if os.path.isdir(head):
+        head, _ = os.path.split(tmp_path)
+        head_of_head, _ = os.path.split(head)
+        if os.path.isdir(head_of_head):
             if os.path.isfile(tmp_path):
                 raise IOError('\'{0}\' is a file! Use a empty folder instead.'.format(tmp_path))
             elif os.path.isdir(tmp_path):
@@ -51,7 +76,7 @@ class Frames:
                 os.makedirs(tmp_path)
             self._frame_path = tmp_path
         else:
-            raise IOError('The parent dir \'{0}\' does not exist!'.format(head))
+            raise IOError('The parent dir \'{0}\' does not exist!'.format(head_of_head))
 
     frame_path = property(get_frame_path, set_frame_path)
 
@@ -94,85 +119,141 @@ class Frames:
 
     count_num = property(get_count_num, set_count_num)
 
-################################property dirver_type################################
-    def get_dirver_type(self):
-        return self._dirver_type
+################################property plot_type################################
+    def get_plot_type(self):
+        return self._plot_type
 
-    def set_dirver_type(self, value):
-        self._dirver_type = value
+    def set_plot_type(self, value):
+        self._plot_type = value
 
-    dirver_type = property(get_dirver_type, set_dirver_type)
+    plot_type = property(get_plot_type, set_plot_type)
 
 ################################method plot_beam_driven################################
 #plot one frame for beam driven cases
     def plot_beam_driven(self, out_num):
         h_fig = plt.figure(figsize=(8,4.5))
-        file1 = outfile.OutFile(path=self.simulation_path, field_name='charge', average='', spec_name=self.background_spec_name, out_num=out_num)
+        self.outfile.field_name='charge'
+        self.outfile.spec_name=self.background_spec_name
+        self.outfile.out_num=out_num
         h_ax = h_fig.add_subplot(111)
         h_ax.set_aspect('equal','box')
-        file1.open()
-        file1.read_data_slice(dir=self.dir)
-        file1.plot_data(h_fig, h_ax, vmin=-4., vmax=0, cmap='gray')
-        file1._color_bar.set_label('$\\rho_e$')
-        file1.close()
+        self.outfile.open()
+        self.outfile.read_data_slice(dir=self.dir)
+        self.outfile.plot_data(h_fig, h_ax, vmin=self.background_vmin, vmax=self.background_vmax, cmap='gray')
+        self.outfile._color_bar.set_label('$\\rho_e$')
+        self.outfile.close()
 
-        file1.spec_name=self.dirver_spec_name
-        file1.open()
-        file1.read_data_slice(dir=self.dir)
-        file1.plot_data(h_fig, h_ax, vmin=-5., vmax=0, cmap=my_cmap.cmap_higher_range_transparent(plt.cm.hot))
-        file1._color_bar.set_label('$\\rho_d$')
-        file1.close()
+        self.outfile.spec_name=self.driver_spec_name
+        self.outfile.open()
+        self.outfile.read_data_slice(dir=self.dir)
+        self.outfile.plot_data(h_fig, h_ax, vmin=self.driver_vmin, vmax=self.driver_vmax, cmap=my_cmap.cmap_higher_range_transparent(plt.cm.hot))
+        self.outfile._color_bar.set_label('$\\rho_d$')
+        if self.if_driver_cm:
+            try:
+                self.outfile.data_center_of_mass2d()
+                self.outfile.plot_data(h_fig, h_ax, linestyle='c--')
+            # RuntimeError occurs when there is no particle
+            except RuntimeError: pass
+        self.outfile.close()
 
         if self.trail_spec_name is not None:
-            file1.spec_name=self.trail_spec_name
-            file1.open()
-            file1.read_data_slice(dir=self.dir)
-            file1.plot_data(h_fig, h_ax, vmin=-0.2, vmax=0, cmap=my_cmap.cmap_higher_range_transparent())
-            file1._color_bar.set_label('$\\rho_t$')
-            file1.close()
+            self.outfile.spec_name=self.trail_spec_name
+            self.outfile.open()
+            self.outfile.read_data_slice(dir=self.dir)
+            self.outfile.plot_data(h_fig, h_ax, vmin=self.trail_vmin, vmax=self.trail_vmax, cmap=my_cmap.cmap_higher_range_transparent())
+            self.outfile._color_bar.set_label('$\\rho_t$')
+            if self.if_trail_cm:
+                try:
+                    self.outfile.data_center_of_mass2d()
+                    self.outfile.plot_data(h_fig, h_ax, linestyle='m--')
+                # RuntimeError occurs when there is no particle
+                except RuntimeError: pass
+            self.outfile.close()
 
         if self.if_e1:
-            file1.field_name='e1'
-            file1.open()
-            file1.read_data_lineout()
-            file1.plot_data(h_fig, h_ax, linestyle='-r', if_ylabel=False, multiple=1)
-            file1.close()
+            self.outfile.field_name='e1'
+            self.outfile.open()
+            self.outfile.read_data_lineout()
+            self.outfile.plot_data(h_fig, h_ax, linestyle='-r', if_ylabel=False, multiple=self.e1_multiple)
+            self.outfile.close()
 
         if self.if_psi:
-            file1.field_name='psi'
-            file1.open()
-            file1.read_data_lineout()
-            file1.plot_data(h_fig, h_ax, linestyle='-b', if_ylabel=False, multiple=1)
-            file1.close()
+            self.outfile.field_name='psi'
+            self.outfile.open()
+            self.outfile.read_data_lineout()
+            self.outfile.plot_data(h_fig, h_ax, linestyle='-b', if_ylabel=False, multiple=self.psi_multiple)
+            self.outfile.close()
 
         plt.tight_layout()
         return h_fig
 
 ################################method plot_laser_driven################################
 #plot one frame for laser driven cases
-    def plot_laser_driven(self, out_num):
+    def plot_laser_driven(self, out_num, if_laser_profile=False):
+        ''' When if_laser_profile is Ture, plot the laser profile instead of original E-field'''
         h_fig = plt.figure(figsize=(6.5,5))
-        file1 = outfile.OutFile(path=self.simulation_path, field_name='charge', average='-savg', spec_name='plasma', out_num=out_num)
+        self.outfile.field_name='charge'
+        self.outfile.spec_name=self.background_spec_name
+        self.outfile.out_num=out_num
         h_ax = h_fig.add_subplot(111)
-        h_ax.set_aspect('equal', 'box')
-        plt.ylim(-10,10)
-        file1.open()
-        file1.read_data_slice(dir=self.dir)
-        file1.plot_data(h_fig, h_ax, cmap='gray', vmin=-5.)
-        file1._color_bar.set_label('$\\rho_e$')
-        file1.close()
+        #h_ax.set_aspect('equal', 'box')
+        #plt.ylim(-10,10)
+        self.outfile.open()
+        self.outfile.read_data_slice(dir=self.dir)
+        self.outfile.plot_data(h_fig, h_ax, cmap='gray', vmax=self.background_vmax, vmin=self.background_vmin)
+        self.outfile._color_bar.set_label('$\\rho_e$')
+        self.outfile.close()
 
-        file1.field_name='e3'
-        file1.open()
-        file1.read_data_slice(dir=self.dir)
-        file1.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_middle_range_transparent())
-        file1._color_bar.set_label('$E_y$')
-        file1.close()
+        if self.trail_spec_name is not None:
+            self.outfile.spec_name=self.trail_spec_name
+            self.outfile.open()
+            self.outfile.read_data_slice(dir=self.dir)
+            self.outfile.plot_data(h_fig, h_ax, vmin=self.trail_vmin, vmax=self.trail_vmax, cmap=my_cmap.cmap_higher_range_transparent())
+            self.outfile._color_bar.set_label('$\\rho_t$')
+            self.outfile.close()
+
+        self.outfile.field_name='e3'
+        self.outfile.open()
+        self.outfile.read_data_slice(dir=self.dir)
+        if if_laser_profile:
+            self.outfile.data_profile2d()
+            self.outfile.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_lower_range_transparent(plt.cm.Reds, transparency_transition_region=[0.15,0.4]))
+        else: self.outfile.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_middle_range_transparent())
+        self.outfile._color_bar.set_label('$E_y$')
+        self.outfile.close()
+        plt.tight_layout()
+        return h_fig
+
+################################method plot_p1x1################################
+#plot one frame of p1x1 for species self.trail_spec_name
+# This method is deprecated. It's function can be replaced by plot_trail_phasespace_raw
+#    def plot_p1x1(self, out_num):
+#        h_fig = plt.figure(figsize=(6.5,5))
+#        file1 = outfile.OutFile(path=self.simulation_path, field_name='p1x1', average='', spec_name=self.trail_spec_name, use_num_list = self.use_num_list, out_num=out_num)
+#        h_ax = h_fig.add_subplot(111)
+#        file1.open()
+#        file1.read_data()
+#        file1.plot_data(h_fig, h_ax, if_log_colorbar=True)
+#        #file1._color_bar.set_label('$\\rho_e$')
+#        file1.close()
+#        plt.tight_layout()
+#        return h_fig
+
+################################method plot_trail_phasespace_raw################################
+#plot one frame of phasespace for species self.trail_spec_name. Phasespace is constructed from raw data. Phasespace type is determined by self.plot_type.
+    def plot_trail_phasespace_raw(self, out_num):
+        h_fig = plt.figure(figsize=(6.5,5))
+        self.outfile.spec_name=self.plot_spec_name
+        self.outfile.out_num=out_num
+        h_ax = h_fig.add_subplot(111)
+        self.outfile.open()
+        self.outfile.plot_raw_hist2D(h_fig, h_ax, dims=self.plot_type, cmap=my_cmap.cmap_lower_range_transparent(), if_log_colorbar=False)
+        self.outfile.close()
         plt.tight_layout()
         return h_fig
 
 ################################method plot_save################################
-#plot one frame and save using the method either plot_save_beam_driven or plot_save_laser_driven, depends on the "dirver_type" property (0 for beam driver and 1 for laser driver)
+#plot one frame and save using the method either plot_save_beam_driven or plot_save_laser_driven, depends on the "plot_type" property (0 for beam driver side view, 1 for laser driver side view, 2 for phase space "p1x1" of self.trail_spec_name)
     def plot_save(self, *args, **kwargs):
         if 'out_num' in kwargs:
             out_num = kwargs['out_num']
@@ -183,20 +264,31 @@ class Frames:
             print('Skipping existing number {}.'.format(out_num))
         else:
             print('Working on number {}.'.format(out_num))
-            methods = (self.plot_beam_driven, self.plot_laser_driven)
-            h_fig = methods[self.dirver_type](*args, **kwargs)
+            if 'beam_driven' == self.plot_type: h_fig = self.plot_beam_driven(*args, **kwargs)
+            elif 'laser_driven' == self.plot_type: h_fig = self.plot_laser_driven(*args, **kwargs)
+            else: h_fig = self.plot_trail_phasespace_raw(*args, **kwargs)
             plt.savefig(save_file_name, format=self.save_type)
             plt.close(h_fig)
 
 ################################method save_frames################################
 #save all frames
-    def save_frames(self):
+    def save_frames(self, *args, **kwargs):
         print('Working on simulation \'{0}\' and saving frames at \'{1}\'.'.format(self.simulation_path, self.frame_path))
-        try:
-            for i in range(self.start_num, self.start_num+self.count_num*self.stride_num, self.stride_num):
-                self.plot_save(i)
-        except IOError:
-            print('Iteration stops at frame number {0}.'.format(i))
+        missing_file = 0
+        for i in range(self.start_num, self.start_num+self.count_num*self.stride_num, self.stride_num):
+            try:
+                self.plot_save(i, *args, **kwargs)
+                #set missing_file = 0 if success
+                missing_file = 0
+            except FileNotFoundError as err:
+                missing_file = missing_file+1
+                if missing_file>self.max_missing_file:
+                    print('Iteration stops at frame number {0}. Exception message:\n{1}'.format(i, err))
+                    break
+                else: print('Warning! File No. {0} missing. Exception message:\n{1}'.format(i, err))
+            except KeyError as err:
+                print('Number {} does not exist. Seems all files are processed. Finishing...'.format(i))
+                break
 
 ################################method make_movie################################
 #make movie based on the saved frames
@@ -205,7 +297,16 @@ class Frames:
 #        subprocess.call('mencoder \'{0}/*.png\' -mf type=png:fps=10 -ovc lavc -lavcopts vcodec=wmv2 -oac copy -o {0}/movie.mpg'.format(self.frame_path), shell=True)
 
 if __name__ == '__main__':
-    #frame1 = Frames('/home/zming/simulations/os2D/os_PT3D4','/home/zming/simulations/os2D/os_PT3D4/movie1', 1, start_num = 63, count_num=1000)
-    frame1 = Frames('/home/zming/simulations/os2D/os_beam3D52','movie2', 0, start_num = 0, count_num=999, trail_spec_name='He_e', if_e1=True, if_psi=True, dir=2)
+    #frame1 = Frames(code_name = 'hipace', simulation_path = '/home/zming/mnt/JSCRATCH/50um600pC1.1e16thh', frame_folder='hi_Frames/Frames2_cm', plot_type = 'beam_driven', use_num_list = True, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma_electrons', background_vmin=-5, driver_spec_name='driver', driver_vmin=-20, trail_spec_name='trailer', trail_vmax=0., trail_vmin=-40., if_e1=False, if_psi=False, if_driver_cm=True, if_trail_cm=True, max_missing_file=2, dir=2)
+    #frame1 = Frames(code_name = 'hipace', simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1/scan_2020_1_29_driver_profile_scan/density0.6/zc1_1_hi0.1den_renorm', frame_folder='hi_Frames/slice_x-z', plot_type = 'beam_driven', use_num_list = True, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma_charge', background_vmax=0., background_vmin=-1e1, driver_spec_name='beam_charge', driver_vmin=-1e2, if_e1=True, e1_multiple=1e1, if_psi=False, dir=2)
+    #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/simulations/os2D/os_DRI3D19', frame_folder='x3p3', plot_type = 6, start_num = 37, stride_num=1, count_num=99999, trail_spec_name='plasma')
+    #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/simulations/os2D/os_DRI3D19', frame_folder='Frames1', plot_type = 0, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-10, driver_spec_name='beam-driver', driver_vmin=-5, if_e1=True, if_psi=False, dir=1)
+    #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/mnt/JSCRATCH/X1/scan_2020_1_29_driver_profile_scan/zc1_1', frame_folder='os_Frames/ramp_p2x2', plot_type = 'p2x2', plot_spec_name = 'ramp', start_num = 64, stride_num=1, count_num=99999)
+    #frame1 = Frames(simulation_path = '/home/zming/mnt/JSCRATCH/os_PT3D27', frame_folder='Frames/p1x1', plot_type = 'p1x1', start_num = 1, stride_num=1, count_num=99999, trail_spec_name='plasma')
+    #frame1 = Frames(simulation_path = '/home/zming/mnt/JSCRATCH/os_PT3D27', frame_folder='Frames/laser_profile_slice_x-z', plot_type = 'laser_driven', average='-savg', start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-5., trail_spec_name=None, if_e1=False, if_psi=False, dir=2)
+    #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/mnt/JSCRATCH/X1/scan_2020_2_20_driver_sigma_x_scan/driver_sigma_x_35/y_0um', frame_folder='os_Frames/slice_x_z', plot_type = 'beam_driven', plot_spec_name = 'driver' , start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-0.002, driver_spec_name='driver', driver_vmin=-0.005, trail_spec_name='ramp', trail_vmax=0, trail_vmin=-0.002, if_driver_cm=False, if_trail_cm=False, if_e1=True, e1_multiple=1000., if_psi=False, psi_multiple=100., dir=2)
+    #frame1 = Frames(code_name = 'hipace', simulation_path = '/home/zming/mnt/JSCRATCH/50um600pC1.1e16th_mdmt_cold', frame_folder='hi_Frames/slice_y_z', plot_type = 'beam_driven', plot_spec_name = 'driver', use_num_list = True, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma_electrons', background_vmin=-10, driver_spec_name='driver', driver_vmin=-10, trail_spec_name='trailer', trail_vmax=0, trail_vmin=-30, if_driver_cm=True, if_trail_cm=True, dir=1)
+    #frame1 = Frames(simulation_path = '/home/zming/mnt/JSCRATCH/os_beam3D/os_beam3D157', frame_folder='os_Frames/slice_x-z', plot_type = 'beam_driven', start_num = 13, stride_num=1, count_num=99999, background_spec_name='e', background_vmin=-5, driver_spec_name='driver', driver_vmin=-10, trail_spec_name='He_e', trail_vmax=0., trail_vmin=-2., if_e1=True, if_psi=True, dir=2)
+    frame1 = Frames(code_name = 'osiris', simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_pond_scatter3D1', frame_folder='os_Frames/slice_x_z', plot_type = 'laser_driven', start_num = 0, stride_num=1, count_num=99999, background_spec_name='e', background_vmin=-2., dir=2)
     frame1.save_frames()
     #frame1.make_movie()
