@@ -151,7 +151,7 @@ class Frames:
         if self.if_driver_cm:
             try:
                 self.outfile.data_center_of_mass2d()
-                self.outfile.plot_data(h_fig, h_ax, linestyle='c--')
+                self.outfile.plot_data(h_fig, h_ax, c='c', ls='--')
             # RuntimeError occurs when there is no particle
             except RuntimeError: pass
         self.outfile.close()
@@ -165,7 +165,7 @@ class Frames:
             if self.if_trail_cm:
                 try:
                     self.outfile.data_center_of_mass2d()
-                    self.outfile.plot_data(h_fig, h_ax, linestyle='m--')
+                    self.outfile.plot_data(h_fig, h_ax, c='m', ls='--')
                 # RuntimeError occurs when there is no particle
                 except RuntimeError: pass
             self.outfile.close()
@@ -174,14 +174,14 @@ class Frames:
             self.outfile.field_name='e1'
             self.outfile.open()
             self.outfile.read_data_lineout()
-            self.outfile.plot_data(h_fig, h_ax, linestyle='-r', if_ylabel=False, multiple=self.e1_multiple)
+            self.outfile.plot_data(h_fig, h_ax, if_ylabel=False, multiple=self.e1_multiple, c='r', ls='-')
             self.outfile.close()
 
         if self.if_psi:
             self.outfile.field_name='psi'
             self.outfile.open()
             self.outfile.read_data_lineout()
-            self.outfile.plot_data(h_fig, h_ax, linestyle='-b', if_ylabel=False, multiple=self.psi_multiple)
+            self.outfile.plot_data(h_fig, h_ax, if_ylabel=False, multiple=self.psi_multiple, c='b', ls='-')
             self.outfile.close()
 
         plt.tight_layout()
@@ -301,12 +301,12 @@ if __name__ == '__main__':
     #frame1 = Frames(code_name = 'hipace', simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1/scan_2020_1_29_driver_profile_scan/density0.6/zc1_1_hi0.1den_renorm', frame_folder='hi_Frames/slice_x-z', plot_type = 'beam_driven', use_num_list = True, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma_charge', background_vmax=0., background_vmin=-1e1, driver_spec_name='beam_charge', driver_vmin=-1e2, if_e1=True, e1_multiple=1e1, if_psi=False, dir=2)
     #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/simulations/os2D/os_DRI3D19', frame_folder='x3p3', plot_type = 6, start_num = 37, stride_num=1, count_num=99999, trail_spec_name='plasma')
     #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/simulations/os2D/os_DRI3D19', frame_folder='Frames1', plot_type = 0, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-10, driver_spec_name='beam-driver', driver_vmin=-5, if_e1=True, if_psi=False, dir=1)
-    #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/mnt/JSCRATCH/X1/scan_2020_1_29_driver_profile_scan/zc1_1', frame_folder='os_Frames/ramp_p2x2', plot_type = 'p2x2', plot_spec_name = 'ramp', start_num = 64, stride_num=1, count_num=99999)
+    #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/mnt/JSCRATCH/X1/2020_2_4_plasma_profile_tailoring', frame_folder='os_Frames/ramp_p2x2', plot_type = 'p2x2', plot_spec_name = 'ramp', start_num = 77, stride_num=1, count_num=99999)
     #frame1 = Frames(simulation_path = '/home/zming/mnt/JSCRATCH/os_PT3D27', frame_folder='Frames/p1x1', plot_type = 'p1x1', start_num = 1, stride_num=1, count_num=99999, trail_spec_name='plasma')
     #frame1 = Frames(simulation_path = '/home/zming/mnt/JSCRATCH/os_PT3D27', frame_folder='Frames/laser_profile_slice_x-z', plot_type = 'laser_driven', average='-savg', start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-5., trail_spec_name=None, if_e1=False, if_psi=False, dir=2)
-    #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/mnt/JSCRATCH/X1/scan_2020_2_20_driver_sigma_x_scan/driver_sigma_x_35/y_0um', frame_folder='os_Frames/slice_x_z', plot_type = 'beam_driven', plot_spec_name = 'driver' , start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-0.002, driver_spec_name='driver', driver_vmin=-0.005, trail_spec_name='ramp', trail_vmax=0, trail_vmin=-0.002, if_driver_cm=False, if_trail_cm=False, if_e1=True, e1_multiple=1000., if_psi=False, psi_multiple=100., dir=2)
+    #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/mnt/JSCRATCH/X1/2020_2_4_plasma_profile_tailoring/2', frame_folder='os_Frames/slice_y_z', plot_type = 'beam_driven', plot_spec_name = 'driver' , start_num = 64, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-0.002, driver_spec_name='driver', driver_vmin=-0.005, trail_spec_name='ramp', trail_vmax=0, trail_vmin=-0.002, if_driver_cm=False, if_trail_cm=False, if_e1=True, e1_multiple=10000., if_psi=False, psi_multiple=100., dir=1)
     #frame1 = Frames(code_name = 'hipace', simulation_path = '/home/zming/mnt/JSCRATCH/50um600pC1.1e16th_mdmt_cold', frame_folder='hi_Frames/slice_y_z', plot_type = 'beam_driven', plot_spec_name = 'driver', use_num_list = True, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma_electrons', background_vmin=-10, driver_spec_name='driver', driver_vmin=-10, trail_spec_name='trailer', trail_vmax=0, trail_vmin=-30, if_driver_cm=True, if_trail_cm=True, dir=1)
     #frame1 = Frames(simulation_path = '/home/zming/mnt/JSCRATCH/os_beam3D/os_beam3D157', frame_folder='os_Frames/slice_x-z', plot_type = 'beam_driven', start_num = 13, stride_num=1, count_num=99999, background_spec_name='e', background_vmin=-5, driver_spec_name='driver', driver_vmin=-10, trail_spec_name='He_e', trail_vmax=0., trail_vmin=-2., if_e1=True, if_psi=True, dir=2)
-    frame1 = Frames(code_name = 'osiris', simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_pond_scatter3D1', frame_folder='os_Frames/slice_x_z', plot_type = 'laser_driven', start_num = 0, stride_num=1, count_num=99999, background_spec_name='e', background_vmin=-2., dir=2)
+    frame1 = Frames(code_name = 'osiris', simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_pond_scatter3D/os_pond_scatter3D6', frame_folder='os_Frames/slice_x_z', plot_type = 'laser_driven', start_num = 0, stride_num=1, count_num=99999, background_spec_name='e', dir=2)#, background_vmin=-.2
     frame1.save_frames()
     #frame1.make_movie()

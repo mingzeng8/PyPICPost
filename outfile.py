@@ -18,9 +18,10 @@ float_type=np.float64
 class OutFile:
     def __init__(self, code_name = 'osiris', path = '.', out_type = None, field_name = 'e3', spec_name = '', use_num_list = False, out_num = 0, average='', cyl_m_num = 0, cyl_m_re_im='re'):
 ##value digit_num##
-        self._accepted_code_name = {'osiris', 'hipace'}
-        self.digit_num = 6
-        self.code_name = code_name
+        self._accepted_code_name = {'osiris', 'quickpic', 'hipace'}
+        self.code_name = code_name.lower()
+        if 'quickpic' == self.code_name: self.digit_num = 8
+        else: self.digit_num = 6
         self.path = path
         self.spec_name = spec_name
         self._field_name_to_out_type = {'psi':'FLD', 'e1':'FLD', 'e2':'FLD', 'e3':'FLD', 'e3_cyl_m':'FLD_CYL_M', 'b1':'FLD', 'b2':'FLD', 'b3':'FLD', 'j1':'DENSITY', 'ene':'DENSITY', 'charge':'DENSITY', 'ion_charge':'ION', 'p1x1':'PHA', 'p2x2':'PHA', 'raw':'RAW', 'ExmBy':'FLD', 'Ez':'FLD', 'EypBx':'FLD', 'tracks':'TRACKS'}
@@ -32,12 +33,16 @@ class OutFile:
         self.cyl_m_re_im = cyl_m_re_im
 
         self._num_dimensions = 0
-        self._axis_labels_original = ('z', 'x', 'y', '$p_z$', '$p_x$', '$p_y$')
+        ''' This is moved to self.set_code_name() so that self._axis_labels_original is modified every time code name is changed.
+        if self.code_name in {'quickpic', 'hipace'}: self._axis_labels_original = ('$\\xi$', 'x', 'y', '$p_z$', '$p_x$', '$p_y$')
+        else: self._axis_labels_original = ('z', 'x', 'y', '$p_z$', '$p_x$', '$p_y$')'''
         self._axis_units_original = ('$c / \\omega_p$',)*3 + ('$m_ec$',)*3
         #self._axis_units_original = ('$k_p^{-1}$',)*3 + ('$m_ec$',)*3
         self._field_names = {'psi':'$\psi$', 'e1':'$E_z$', 'e2':'$E_x$', 'e3':'$E_y$', 'e3_cyl_m':'$E_y$', 'b1':'$B_z$', 'b2':'$B_x$', 'b3':'$B_y$', 'j1':'$J_z$', 'ene':'$E_k / n_p m_e c^2$', 'charge':'$\\rho$', 'ion_charge':'$\\rho$', 'p1x1':'$p_1x_1$ [arb. units]', 'p2x2':'$p_2x_2$ [arb. units]', 'beam_charge':'$\\rho_b$', 'plasma_charge':'$\\rho_e$', 'ExmBy':'$E_x-B_y$', 'Ez':'$E_z$', 'EypBx':'$E_y+B_x$'\
         # Some field naming problem in new HiPACE
-        , 'plasma_electrons': '$\\rho_e$', 'driver': '$\\rho_d$', 'trailer': '$\\rho_t$'}
+        , 'plasma_electrons': '$\\rho_e$', 'driver': '$\\rho_d$', 'trailer': '$\\rho_t$'\
+        # Some field naming in QuickPIC
+        , 'ez':'$E_z$', 'ex':'$E_x$', 'ey':'$E_y$', 'bz':'$B_z$', 'bx':'$B_x$', 'by':'$B_y$', 'charge_slice_xz':'$\\rho$'}
         self._accepted_out_type = {'DENSITY', 'FLD', 'FLD_CYL_M', 'ION', 'PHA', 'RAW', 'TRACKS'}
         # if use_num_list = True, the actual out_num used is self._avail_num_list[out_num]
         self.use_num_list = use_num_list
@@ -52,6 +57,23 @@ class OutFile:
         if value not in self._accepted_code_name:
             raise ValueError('code_name \'{0}\' not implemented!'.format(value))
         self._code_name = value
+        if value in {'quickpic', 'hipace'}: self._axis_labels_original = ('$\\xi$', 'x', 'y', '$p_z$', '$p_x$', '$p_y$')
+        else: self._axis_labels_original = ('z', 'x', 'y', '$p_z$', '$p_x$', '$p_y$')
+        ''' Deprecated
+        # Set the AXIS group and data matrix axis sequence of the h5 file for different codes
+        if value in {'osiris'}:
+            # OSIRIS 3D h5 file has data axes [y,x,z] and AXIS group [z,x,y].
+            # OSIRIS 2D h5 file has data axes [x,z] and AXIS group [z,x].
+            self._h5_data_seq = [2,1,0]
+            self._h5_AXIS_seq = [0,1,2]
+        elif value in {'quickpic'}:
+            # QuickPIC h5 file has data axes [z,y,x] and AXIS group [x,y,z].
+            self._h5_data_seq = [0,2,1]
+            self._h5_AXIS_seq = [2,0,1]
+        elif value in {'hipace'}:
+            # HiPACE h5 file has data axes [z,x,y] and AXIS group [z,x,y].
+            self._h5_data_seq = [0,1,2]
+            self._h5_AXIS_seq = [0,1,2]'''
 
     code_name = property(get_code_name, set_code_name)
 
@@ -180,6 +202,14 @@ class OutFile:
                 self._prefix_filename = '{0}/{1}/RAW-{1}-'.format(main_folder_path, self.spec_name)
             elif 'TRACKS' == self._out_type:
                 self._prefix_filename = '{0}/{1}-tracks.h5'.format(main_folder_path, self.spec_name)
+        elif 'quickpic' == self.code_name:
+            field_name_dict = {'charge':'Charge', 'e1':'Ez', 'e2':'Ex', 'e3':'Ey', 'b1':'Bz', 'b2':'Bx', 'b3':'By', 'psi':'Psi'}
+            if 'DENSITY' == self._out_type:
+                self._prefix_filename = '{0}/{1}/{2}/{3}_'.format(self.path, self.spec_name, field_name_dict[self.field_name], self.field_name)
+            elif 'FLD' == self._out_type:
+                self._prefix_filename = '{0}/Fields/{1}/{2}_'.format(self.path, field_name_dict[self.field_name], field_name_dict[self.field_name].lower())
+            elif 'RAW' == self._out_type:
+                self._prefix_filename = '{0}/{1}/RAW-{1}-'.format(main_folder_path, self.spec_name)
         elif 'hipace' == self.code_name:
             main_folder_path = '{}/DATA'.format(self.path)
             if 'DENSITY' == self._out_type:
@@ -277,6 +307,11 @@ class OutFile:
                 #try to read the dimension from 'AXIS'
                 #for the code osiris, when plotting phasespace, the data matrix size may be different from the attribute NX
                 self._num_dimensions = len(self.fileid['AXIS'].keys())
+                ''' Deprecated
+                if self.code_name in {'osiris'}:
+                    # For OSIRIS, modifiy self._h5_data_seq for 2d and 1d cases
+                    if 2==self._num_dimensions: self._h5_data_seq = [1,0]
+                    elif 1==self._num_dimensions: self._h5_data_seq = [0]'''
 ##value _axis_range##
                 self._axis_range = np.zeros((2,self._num_dimensions), dtype=float_type)
                 for i in range(self._num_dimensions):
@@ -287,6 +322,11 @@ class OutFile:
                 xmin = self.fileid.attrs.get('XMIN')
                 nx = self.fileid.attrs.get('NX')
                 self._num_dimensions = len(xmax)
+                ''' Deprecated
+                if self.code_name in {'osiris'}:
+                    # For OSIRIS, modifiy self._h5_data_seq for 2d and 1d cases
+                    if 2==self._num_dimensions: self._h5_data_seq = [1,0]
+                    elif 1==self._num_dimensions: self._h5_data_seq = [0]'''
 ##value _axis_range##
                 self._axis_range = np.zeros((2,self._num_dimensions), dtype=float_type)
                 for i in range(self._num_dimensions):
@@ -301,7 +341,7 @@ class OutFile:
                 nx
             except NameError:
                 #if nx not defined, get nx from the size of the matrix. In case of code osiris, the data matrix size may be different from the attribute when plotting phasespace.
-                nx = np.flipud(self.fileid[self._data_name_in_file].shape)
+                nx = np.flip(self.fileid[self._data_name_in_file].shape)
 ##value _cell_size##
             #if 'osiris' == self.code_name:
             #In osiris, the data 3 dimensions correspond to dir = 2, 1, 0, respectively.
@@ -590,7 +630,7 @@ class OutFile:
         self._data = np.zeros(self.fileid[self._data_name_in_file].shape, dtype=float_type)
         self.fileid[self._data_name_in_file].read_direct(self._data)
         self._axis_slices = [slice(self._axis_range[0, i], self._axis_range[1, i], self._cell_size[i]) for i in range(self._num_dimensions)]
-        if 'p1x1' == self.field_name:
+        if self.field_name in {'p1x1', 'p2x2', 'p3,x3'}:
             self._axis_labels = [self._axis_labels_original[0], self._axis_labels_original[3]]
             self._axis_units = [self._axis_units_original[0], self._axis_units_original[3]]
         else:
@@ -598,46 +638,82 @@ class OutFile:
             self._axis_units = [self._axis_units_original[i] for i in range(self._num_dimensions)]
         self._fig_title = 't = {0:.2f}'.format(self.time)
 
+################################method dirs_in_AXIS_data################################
+    def dirs_in_AXIS_data(self, dir):
+        '''
+            Getting dir_in_AXIS and dir_in_data according to dir.
+            OSIRIS 3D h5 file has data axes [y,x,z] and AXIS group [z,x,y].
+            OSIRIS 2D h5 file has data axes [x,z] and AXIS group [z,x].
+            QuickPIC h5 file has data axes [z,y,x] and AXIS group [x,y,z].
+            HiPACE h5 file has data axes [z,x,y] and AXIS group [z,x,y].
+        '''
+        if self.code_name in {'osiris'}:
+            # OSIRIS h5 file has data axes [y,x,z] and AXIS group [z,x,y].
+            dir_in_AXIS = dir
+            dir_in_data = self._num_dimensions-1-dir
+        elif self.code_name in {'quickpic'}:
+            # QuickPIC h5 file has data axes [z,y,x] and AXIS group [x,y,z].
+            dir_in_AXIS = (dir+2)%3
+            qp_data_axes = np.array((0,2,1))
+            dir_in_data = qp_data_axes[dir]
+        elif self.code_name in {'hipace'}:
+            # HiPACE h5 file has data axes [z,x,y] and AXIS group [z,x,y].
+            dir_in_AXIS = dir
+            dir_in_data = dir
+        # Deprecated
+        # return self._h5_AXIS_seq[dir], self._h5_data_seq[dir]
+        return dir_in_AXIS, dir_in_data
+
 ################################method read_data_slice################################
     def read_data_slice(self, dir = 2, pos = None):
-        '''dir is the direction perpendicular to the slice plane'''
+        '''dir is the direction perpendicular to the slice plane.
+           dir = 0 corresponds to longidudinal direction (z).
+           dir = 1 corresponds to the first transverse direction (x).
+           dir = 2 corresponds to the second transverse direction (y).
+           OSIRIS h5 file has data axes [y,x,z] and AXIS group [z,x,y].
+           QuickPIC h5 file has data axes [z,y,x] and AXIS group [x,y,z].
+           HiPACE h5 file has data axes [z,x,y] and AXIS group [z,x,y].
+        '''
         if 3 > self._num_dimensions:
             raise RuntimeError('Method OutFile.read_data_slice() cannot work on data with dimension number < 3!')
         if dir not in range (3):
             raise ValueError('Slice direction should be 0, 1 or 2!')
-        if 'osiris' == self.code_name:
-        #in osiris, the data dimension corresponds to size in direction 2,1,0
-            tmp_len = self.fileid[self._data_name_in_file].shape[2-dir]
-        if 'hipace' == self.code_name:
-        #in hipace, the data dimension corresponds to size in direction 0,1,2
-            tmp_len = self.fileid[self._data_name_in_file].shape[dir]
+
+        # Setting dir_in_AXIS and dir_in_data
+        dir_in_AXIS, dir_in_data = self.dirs_in_AXIS_data(dir)
+
+        # Determine the slice position
+        slice_dir_len = self.fileid[self._data_name_in_file].shape[dir_in_data]
         if pos is None:
             #set pos at the middle of the box
-            pos = (self._axis_range[0, dir] + self._axis_range[1, dir])/2.
-            pos_index = int(tmp_len/2.)
+            pos = (self._axis_range[0, dir_in_AXIS] + self._axis_range[1, dir_in_AXIS])/2.
+            pos_index = int(slice_dir_len/2.)
         else:
             #get the index of the nearest grid. +0.5 here has a similar effect of rounding.
-            pos_index = int((pos - self._axis_range[0, dir]) / self._cell_size[dir] + 0.5)
-            if tmp_len<=pos_index:
+            pos_index = int((pos - self._axis_range[0, dir_in_AXIS]) / self._cell_size[dir_in_AXIS] + 0.5)
+            if slice_dir_len<=pos_index:
                 print('Warning: pos is larger than the upper bundary! Force slicing at the upper bundary.')
-                pos_index = tmp_len-1
-                pos = self._axis_range[1, dir]
+                pos_index = slice_dir_len-1
+                pos = self._axis_range[1, dir_in_AXIS]
             elif 0>pos_index:
                 print('Warning: pos is smaller than the lower bundary! Force slicing at the lower bundary.')
                 pos_index = 0
-                pos = self._axis_range[0, dir]
-        if 'osiris' == self.code_name:
-            new_shape = [self.fileid[self._data_name_in_file].shape[i] for i in range(3) if 2-dir != i]
-            slice_tuple = tuple([slice(None, None, None) if 2-dir != i else pos_index for i in range(3)])
-        elif 'hipace' == self.code_name:
-            new_shape = [self.fileid[self._data_name_in_file].shape[i] for i in range(3) if dir != i]
-            slice_tuple = tuple([slice(None, None, None) if dir != i else pos_index for i in range(3)])
+                pos = self._axis_range[0, dir_in_AXIS]
+        # Read date matrix from h5 file
+        new_shape = [self.fileid[self._data_name_in_file].shape[i] for i in range(3) if i != dir_in_data]
+        slice_tuple = tuple([slice(None, None, None) if i != dir_in_data else pos_index for i in range(3)])
         self._data = np.zeros(new_shape, dtype=float_type)
         self.fileid[self._data_name_in_file].read_direct(self._data, source_sel=slice_tuple)
-        if 'hipace' == self.code_name:
-        #transpose data for a "osiris" like plot. Maybe this can be made better by changing source_sel.
+        if self.code_name=='hipace' or (self.code_name=='quickpic' and dir!=0):
+            # Transpose if because the data axes order is reversed compared to OSIRIS, for all dir cases of HiPACE and dir==1, 2 cases of QuickPIC
             self._data = np.transpose(self._data)
-        self._axis_slices = [slice(self._axis_range[0, i], self._axis_range[1, i], self._cell_size[i]) for i in range(3) if i!=dir]#this can be simplified to self._axis_slices = [self._axis_slices[i] for i in range(3) if i!=dir] but bug test is required
+
+        # Determine axes perpendicular to the dir
+        self._axis_slices = [slice(self._axis_range[0, i], self._axis_range[1, i], self._cell_size[i]) for i in range(3) if i!=dir_in_AXIS]
+        if self.code_name=='quickpic' and dir!=0:
+            # Flip for QuickPIC with dir==1 or 2 because it has different order in AXIS
+            self._axis_slices = np.flip(self._axis_slices)
+        # self._axis_labels_original and self._axis_units_original are defined in thie class, independent of the code.
         self._axis_labels = [self._axis_labels_original[i] for i in range(self._num_dimensions) if i!=dir]
         self._axis_units = [self._axis_units_original[i] for i in range(self._num_dimensions) if i!=dir]
         self._fig_title = 't = {0:.2f}, slice at {1} = {2}'.format(self.time, self._axis_labels_original[dir], pos)
@@ -651,18 +727,36 @@ class OutFile:
 
 ################################method data_project3d################################
     def data_project3d(self, dir = 0, if_abs = False, if_square = False):
-        '''dir is the direction the summation is taking through.
-           Currently the project dir is correct for OSIRIS (column-major order, as Fortran).
-           For HiPACE, it's row-major order (as c), so need different slicing of the matrix.
+        '''
+            Taking projection and devide by number of grid.
+            dir is the direction the summation is taking through.
+            dir = 0 corresponds to longidudinal direction (z).
+            dir = 1 corresponds to the first transverse direction (x).
+            dir = 2 corresponds to the second transverse direction (y).
+            OSIRIS h5 file has data axes [y,x,z] and AXIS group [z,x,y].
+            QuickPIC h5 file has data axes [z,y,x] and AXIS group [x,y,z].
+            HiPACE h5 file has data axes [z,x,y] and AXIS group [z,x,y].
         '''
         if dir not in range (3):
             raise ValueError('Project direction should be 0, 1 or 2!')
+
+        # Setting dir_in_AXIS and dir_in_data
+        dir_in_AXIS, dir_in_data = self.dirs_in_AXIS_data(dir)
+
         if if_abs:
             self._data = np.absolute(self._data)
         if if_square:
             self._data = np.square(self._data)
-        self._data = np.sum(self._data, axis = 2-dir)/self.fileid[self._data_name_in_file].shape[2-dir]
-        self._axis_slices = [self._axis_slices[i] for i in range(3) if i!=dir]
+        self._data = np.sum(self._data, axis = dir_in_data)/self.fileid[self._data_name_in_file].shape[dir_in_data]
+        if self.code_name in {'quickpic', 'hipace'}:
+            # Transpose if because the data axes order is reversed compared to OSIRIS
+            self._data = np.transpose(self._data)
+
+        self._axis_slices = [self._axis_slices[i] for i in range(3) if i!=dir_in_AXIS]
+        if self.code_name in {'quickpic'}:
+            # Flip for QuickPIC because it has different order in AXIS
+            self._axis_slices = np.flip(self._axis_slices)
+
         self._axis_labels = [self._axis_labels_original[i] for i in range(self._num_dimensions) if i!=dir]
         self._axis_units = [self._axis_units_original[i] for i in range(self._num_dimensions) if i!=dir]
         self._fig_title = 't = {0:.2f}, project {1}along {2} direction'.format(self.time, 'absolute value ' if if_abs else '', self._axis_labels_original[dir])
@@ -670,8 +764,8 @@ class OutFile:
 ################################method data_project2d################################
     def data_project2d(self, dir = 0, if_abs = False, if_square = False):
         '''dir is the direction the summation is taking through.
-           Currently the project dir is correct for OSIRIS (column-major order, as Fortran).
-           For HiPACE, it's row-major order (as c), so need different slicing of the matrix.
+           Currently the project dir is correct for OSIRIS.
+           For other codes this shall be also correct if the data is taken by self.read_data_slice(), or self.read_data() followed by self.data_project3d()
         '''
         if dir not in range (2):
             raise ValueError('Project direction should be 0 or 1!')
@@ -724,21 +818,28 @@ class OutFile:
 ################################method read_data_lineout################################
     def read_data_lineout(self, dir = 0, pos = None):
         '''
-           Read lineout of the data and save to self._data. Also modify self._axis_slices, self._axis_labels, self._axis_units and self._fig_title.
-           dir : Integer.
-                 Can be [0, 1] in 2D case, and [0, 1, 2] in 3D case.
-           pos : None or a turple of two floats.
-                 The position to take lineout.
-                 If pos is None, set the position at the center of the simulation box.
-           For OSIRIS, the axes of data matrix is [2, 1, 0], or [y, x, z].
-           For HiPACE, the axes of data matrix is [0, 1, 2], or [z, x, y].
+            Read lineout of the data and save to self._data. Also modify self._axis_slices, self._axis_labels, self._axis_units and self._fig_title.
+            dir : Integer.
+                  Can be [0, 1] in 2D case, and [0, 1, 2] in 3D case.
+            pos : None or a turple of two floats.
+                  The position to take lineout.
+                  If pos is None, set the position at the center of the simulation box.
+            OSIRIS h5 file has data axes [y,x,z] and AXIS group [z,x,y].
+            QuickPIC h5 file has data axes [z,y,x] and AXIS group [x,y,z].
+            HiPACE h5 file has data axes [z,x,y] and AXIS group [z,x,y].
         '''
         if 2 > self._num_dimensions:
             raise RuntimeError('Method OutFile.read_data_lineout() cannot work on data with dimension number < 2!')
         if dir not in range(self._num_dimensions):
             raise ValueError('Lineout direction should be in range({0})!'.format(self._num_dimensions))
+
+        # Setting dir_in_AXIS and dir_in_data
+        dir_in_AXIS, dir_in_data = self.dirs_in_AXIS_data(dir)
+
         # box_info_array contains the information of the lower boundary position, cell size and upper boundary position in the directions except the dir direction.
-        box_info_array = np.array([[self._axis_range[0, i], self._cell_size[i], self._axis_range[1, i],] for i in range(self._num_dimensions) if i!=dir])
+        box_info_array = np.array([[self._axis_range[0, i], self._cell_size[i], self._axis_range[1, i],] for i in range(self._num_dimensions) if i!=dir_in_AXIS])
+        # For QuickPIC, if dir==1 or 2, the AXIS should be flipped so that the AXIS is in ascending order
+        if self.code_name=='quickpic' and dir!=0: box_info_array = np.flipud(box_info_array)
         if pos is None:
             # Set pos to the center of box
             pos = (box_info_array[:,0]+box_info_array[:,2])/2
@@ -747,41 +848,36 @@ class OutFile:
         pos_index = pos_index.tolist()
         # Correct pos to the cell position.
         pos = box_info_array[:,0] + box_info_array[:,1]*np.array(pos_index)
-        if 'osiris' == self.code_name:
-            # For OSIRIS, the matrix axes are [2, 1, 0]
-            tmp_len = [self.fileid[self._data_name_in_file].shape[self._num_dimensions-1-i] for i in range(self._num_dimensions) if i!=dir]
-            # If pos_index out of the array range, limit it to the boundary.
-            for i in range(self._num_dimensions-1):
-                if tmp_len[i]<=pos_index[i]:
-                    print('Warning: pos[{0}] is larger than the upper bundary! Force slicing at the upper bundary.'.format(i))
-                    pos_index[i] = tmp_len[i]-1
-                elif 0>pos_index[i]:
-                    print('Warning: pos[{0}] is smaller than the lower bundary! Force slicing at the lower bundary.'.format(i))
-                    pos_index[i] = 0
-            new_shape = self.fileid[self._data_name_in_file].shape[self._num_dimensions-1-dir]
-            pos_index.insert(dir, slice(None, None, None))
-            # Flip the tuple for OSIRIS
-            slice_tuple = tuple(pos_index)[::-1]
-        elif 'hipace' == self.code_name:
-            # For HiPACE, the matrix axes are [0, 1, 2]
-            tmp_len = [self.fileid[self._data_name_in_file].shape[i] for i in range(self._num_dimensions) if i!=dir]
-            # If pos_index out of the array range, limit it to the boundary.
-            for i in range(self._num_dimensions-1):
-                if tmp_len[i]<=pos_index[i]:
-                    print('Warning: pos[{0}] is larger than the upper bundary! Force slicing at the upper bundary.'.format(i))
-                    pos_index[i] = tmp_len[i]-1
-                elif 0>pos_index[i]:
-                    print('Warning: pos[{0}] is smaller than the lower bundary! Force slicing at the lower bundary.'.format(i))
-                    pos_index[i] = 0
-            new_shape = self.fileid[self._data_name_in_file].shape[dir]
-            pos_index.insert(dir, slice(None, None, None))
-            # Do no flip for HiPACE
-            slice_tuple = tuple(pos_index)
+
+        # data size in the directions perpendicular to dir
+        size_perp_dir = [self.fileid[self._data_name_in_file].shape[i] for i in range(self._num_dimensions) if i!=dir_in_data]
+        # For OSIRIS, size_perp_dir should be flipped to be ascending
+        if self.code_name=='osiris': size_perp_dir = size_perp_dir[::-1]
+        # For QuickPIC, if dir==0, size_perp_dir should be flipped to be ascending
+        elif self.code_name=='quickpic' and 0==dir: size_perp_dir = size_perp_dir[::-1]
+
+        # If pos_index out of the array range, limit it to the boundary.
+        for i in range(self._num_dimensions-1):
+            if size_perp_dir[i]<=pos_index[i]:
+                print('Warning: pos[{0}] is larger than the upper bundary! Force slicing at the upper bundary.'.format(i))
+                pos_index[i] = size_perp_dir[i]-1
+            elif 0>pos_index[i]:
+                print('Warning: pos[{0}] is smaller than the lower bundary! Force slicing at the lower bundary.'.format(i))
+                pos_index[i] = 0
+
+        new_shape = self.fileid[self._data_name_in_file].shape[dir_in_data]
+        # To insert the dir_in_data to the pos_index for h5 slicing.
+        # Make pos_index to have the same order as data matrix in h5 file. For OSIRIS and QuickPICin the dir==0 case, flip the position index first.
+        if self.code_name=='osiris' or (self.code_name=='quickpic' and 0==dir): pos_index = pos_index[::-1]
+        pos_index.insert(dir_in_data, slice(None, None, None))
+        slice_tuple = tuple(pos_index)
+
         self._data = np.zeros(new_shape, dtype=float_type)
         self.fileid[self._data_name_in_file].read_direct(self._data, source_sel=slice_tuple)
-        self._axis_slices = [slice(self._axis_range[0, dir], self._axis_range[1, dir], self._cell_size[dir]),]#this can be simplified to self._axis_slices = [self._axis_slices[dir],] but bug test is required
-        self._axis_labels = [self._axis_labels_original[dir],]
-        self._axis_units = [self._axis_units_original[dir],]
+        self._axis_slices = [slice(self._axis_range[0, dir_in_AXIS], self._axis_range[1, dir_in_AXIS], self._cell_size[dir_in_AXIS]),]
+
+        self._axis_labels = [self._axis_labels_original[dir], self._field_names[self.field_name]]
+        self._axis_units = [self._axis_units_original[dir], '']
         tmp_list = [self._axis_labels_original[i] for i in range(self._num_dimensions) if i!=dir]
         tmp_list = ['{0} = {1}'.format(tmp_list[i], pos[i]) for i in range(self._num_dimensions-1)]
         self._fig_title = 't = {0:.2f}, lineout at '.format(self.time) + ', '.join(tmp_list)
@@ -810,14 +906,6 @@ class OutFile:
         self._axis_labels = [self._axis_labels_original[0], 'k']
         self._axis_units = [self._axis_units_original[0], '$k_p$']
         self._fig_title = 't = {0:.2f}, spectrogram'.format(self.time)
-        #print(self._axis_slices)
-        #print('t={0}:{1}:{2}'.format(t[0],t[-1]+t[1]-t[0],t[1]-t[0]))
-        #print(type(Sxx))
-        #plt.pcolormesh(t, f, Sxx, cmap=plt.cm.jet)#, shading='gouraud')
-        #plt.ylabel('Frequency [Hz]')
-        #plt.xlabel('{0} [{1}]'.format(self._axis_labels[0], self._axis_units[0]))
-        #color_bar = plt.colorbar()
-        #plt.show()
 
 ################################method data_profile1d################################
     def data_profile1d(self, peak_height_min_ratio=0.00001):
@@ -856,7 +944,7 @@ class OutFile:
         # not yet finished. Currently this can only work with dir=0.
 
 ################################method plot_data_line################################
-    def plot_data_line(self, h_fig=None, h_ax=None, semilogy=False, linestyle='', if_xlabel=True, if_ylabel=True, if_title=True, multiple=1., offset=0.):
+    def plot_data_line(self, h_fig=None, h_ax=None, if_flip_xy=False, semilogy=False, if_xlabel=None, if_ylabel=None, if_title=True, multiple=1., offset=0., **kwargs):
         '''Plot 1D data in a line. h_ax is the handle of the axis to be plotted on. If h_ax=None, a new figure and axis is created.'''
         if self._data.ndim!=1:
             raise RuntimeError('Data is not one dimensional! The OutFile.plot_data_line() method cannot proceed.')
@@ -868,14 +956,30 @@ class OutFile:
             plotfunc=h_ax.semilogy
         else:
             plotfunc=h_ax.plot
-        plotfunc(np.mgrid[self._axis_slices[0]], (self._data*multiple)+offset, linestyle)
+        if if_flip_xy:
+            plotfunc((self._data*multiple)+offset, np.mgrid[self._axis_slices[0]], **kwargs)
+            set_xlabel = h_ax.set_ylabel
+            set_ylabel = h_ax.set_xlabel
+            get_xlabel = h_ax.get_ylabel
+            get_ylabel = h_ax.get_xlabel
+        else:
+            plotfunc(np.mgrid[self._axis_slices[0]], (self._data*multiple)+offset, **kwargs)
+            set_xlabel = h_ax.set_xlabel
+            set_ylabel = h_ax.set_ylabel
+            get_xlabel = h_ax.get_xlabel
+            get_ylabel = h_ax.get_ylabel
+
+        if if_xlabel is None:
+            # Default if_xlabel to True if get_xlabel is empty
+            if '' == get_xlabel(): if_xlabel = True
+        if if_ylabel is None:
+            # Default if_ylabel to True if get_ylabel is empty
+            if '' == get_ylabel(): if_ylabel = True
+
         if if_xlabel:
-            h_ax.set_xlabel('{0} [{1}]'.format(self._axis_labels[0], self._axis_units[0]))
-        #h_ax.set_ylabel(self._field_names[self._data_name_in_file])
+            set_xlabel('{0} [{1}]'.format(self._axis_labels[0], self._axis_units[0]))
         if if_ylabel:
-            if len(self._axis_labels)>=2:
-                h_ax.set_ylabel('{0} [{1}]'.format(self._axis_labels[1], self._axis_units[1]))
-            #if len(self._axis_labels)<2, calling this will cause an error
+            set_ylabel('{0} [{1}]'.format(self._axis_labels[1], self._axis_units[1]))
         if if_title:
             h_ax.set_title(self._fig_title)
         return h_fig, h_ax
@@ -901,6 +1005,13 @@ class OutFile:
             self._color_bar.set_label(self._field_names[self._data_name_in_file])
         h_ax.set_title(self._fig_title)
         return h_fig, h_ax
+
+################################method isosurface_data_3d################################
+    def isosurface_data_3d(self, h_fig=None, h_ax=None, **kwargs):
+        '''Plot 3D data as isosurface.'''
+        if self._data.ndim!=3:
+            raise RuntimeError('Data is not two dimensional! The OutFile.isosurface_data_3d() method cannot proceed.')
+        raise NotImplementedError('3D data plot not implemented')
 
 ################################method plot_raw_hist_p1################################
     def plot_raw_hist_p1(self, h_fig=None, h_ax=None, num_bins=256, range_max=None, range_min=None):
@@ -1069,7 +1180,7 @@ class OutFile:
 ################################method plot_data################################
     def plot_data(self, *args, **kwargs):
         '''Automatically detect the dimension of data and choose the proper plot method'''
-        plot_methods = (self.plot_data_line, self.pcolor_data_2d)
+        plot_methods = (self.plot_data_line, self.pcolor_data_2d, self.isosurface_data_3d)
         h_fig, h_ax = plot_methods[self._data.ndim-1](*args, **kwargs)
         h_ax.minorticks_on()
         return h_fig, h_ax
@@ -1485,7 +1596,7 @@ if __name__ == '__main__':
         file1.close()
         plt.show()
     def beam_measure():
-        file1 = OutFile(code_name='osiris',path='/home/zming/mnt/JSCRATCH/X1/scan_2019_12_05/He_Ar_3.0/3.0',field_name='raw',spec_name='driver',out_num=150)
+        file1 = OutFile(code_name='osiris',path='/home/zming/mnt/JSCRATCH/X1/2020_2_4_plasma_profile_tailoring/2',field_name='raw',spec_name='driver',out_num=140)
         file1.open()
         file1.read_raw_q()
         file1.read_raw_p1()
@@ -1504,20 +1615,47 @@ if __name__ == '__main__':
         file1.close()
         plt.show()
     def test_os():
-        file1 = OutFile(code_name='osiris',path='/home/zming/mnt/JSCRATCH/os_beam3D/os_beam3D155',field_name='e1',out_num=60)
+        file1 = OutFile(code_name='osiris',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_oblique_laser_test3D',field_name='e3',out_num=4)
         file1.open()
-        file1.read_data_lineout(dir=0, pos=(0.02,0.))
+        file1.read_data_slice()
         file1.plot_data()
         file1.close()
         plt.show()
     def test_hi():
         file1 = OutFile(code_name='hipace',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1/scan_2020_1_29_driver_profile_scan/density0.6/test',field_name='e1',out_num=0)
+        h_fig = plt.figure()
+        h_ax = h_fig.add_subplot(111)
+        h_ax.set_aspect('equal','box')
         file1.open()
-        file1.read_data_lineout(dir=1, pos=(232.,0.))
-        file1.plot_data()
+        file1.read_data_slice(dir = 2)
+        file1.plot_data(h_fig, h_ax)
+        file1.read_data_lineout(dir=0)
+        file1.plot_data(h_fig, h_ax, c='r', ls='-', multiple=1e6)
+        file1.close()
+        plt.tight_layout()
+        plt.show()
+    def test_qp():
+        file1 = OutFile(code_name='quickpic',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/qp_hi_compare',field_name='charge',spec_name='Species0001',out_num=1)
+        h_fig = plt.figure(figsize=(8,4.5))
+        h_ax = h_fig.add_subplot(111)
+        h_ax.set_aspect('equal','box')
+        file1.open()
+        file1.read_data_slice(dir = 2, pos=0.)
+        file1.plot_data(h_fig, h_ax, cmap='gray', if_colorbar=True)
+        file1.close()
+        file1.spec_name='Beam0001'
+        file1.open()
+        file1.read_data_slice(dir = 2, pos=0.)
+        file1.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_higher_range_transparent(plt.cm.hot), if_colorbar=True)
+        file1.close()
+        file1.field_name='e1'
+        file1.open()
+        file1.read_data_lineout(dir=0, pos=(0.,0.))
+        file1.plot_data(h_fig, h_ax, c='r', ls='-', multiple=10.)
         file1.close()
         plt.show()
 
+    #test_qp()
     #test_os()
     test_hi()
     #beam_measure()
