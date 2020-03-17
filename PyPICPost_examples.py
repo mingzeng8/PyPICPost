@@ -1,59 +1,68 @@
 from outfile import *
+from matplotlib.patches import Arc
 
-def os_pond_scatter3D():
-    file1 = OutFile(code_name='osiris',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_pond_scatter3D/os_pond_scatter3D2', field_name='raw', spec_name='e', out_num=9)
+def os_beam3D_plot(h_fig=None, h_ax=None, out_num=16, laser_field_name=None, trail_spec_name=None, **kwargs):
+    if h_fig is None:
+        h_fig = plt.figure()
+    if h_ax is None:
+        h_ax = h_fig.add_subplot(111)
+    file1 = OutFile(path='/home/zming/mnt/JSCRATCH/os_beam3D/os_beam3D146', field_name='charge', spec_name='e', out_num=out_num)
     file1.open()
-    file1.read_raw_q()
-    file1.read_raw_x1()
-    file1.read_raw_x2()
-    file1.read_raw_x3()
-    file1.read_raw_p1()
-    file1.read_raw_p2()
-    #file1.read_raw_p3()
-    file1.read_raw_ene()
+    file1.read_data_slice()
     file1.close()
-    file1.select_raw_data(ene_low=0.1, r_low=1.6, x1_low=-2.)
-    plt.scatter(file1._raw_x1[file1._raw_select_index], file1._raw_x2[file1._raw_select_index])
-    # Get the filtered particles
-    weight = np.abs(file1._raw_q[file1._raw_select_index])
-    p_z_prime = file1._raw_p1[file1._raw_select_index]
-    p_x_prime = file1._raw_p2[file1._raw_select_index]
-    #p_y_prime = file1._raw_p3[file1._raw_select_index]
-    ene = file1._raw_ene[file1._raw_select_index]
-    p_square = np.square(ene+1.)-1.
-    # Generate histogram for N (number of particles) vs. phi_M and theta
-    phi_M = np.linspace(.55, .9, 64)
-    theta_degree = np.linspace(20., 140., 64)
-    # Transform theta from degree to rad
-    theta = theta_degree * (np.pi/180)
-    cos_theta = np.cos(theta)
-    sin_theta = np.sin(theta)
-    N = np.zeros((phi_M.size, theta.size))
-    pzmax=0.
-    for theta_ind in range(theta.size):
-        # Rotate axis for particle momentum
-        p_z = cos_theta[theta_ind]*p_z_prime + sin_theta[theta_ind]*p_x_prime
-        if p_z.max() > pzmax: pzmax = p_z.max()
-        p_perp_square = p_square - np.square(p_z)
-        for phi_M_ind in range(phi_M.size):
-            # Same as p_z >= (1.-np.square(phi_M[phi_M_ind])+p_perp_square)/phi_M[phi_M_ind]/2 but faster
-            #condition = p_z >= (1.-np.square(phi_M[phi_M_ind])+p_perp_square)/phi_M[phi_M_ind]/2
-            condition = ((p_z - p_perp_square/(phi_M[phi_M_ind]*2)) >= (1.-np.square(phi_M[phi_M_ind]))/phi_M[phi_M_ind]/2)
-            #condition = p_z >= 1.-phi_M[phi_M_ind]
-            #if any(condition): print("True")
-            N[phi_M_ind, theta_ind] = np.sum(weight[condition])
-    #print(pzmax)
-    #h_fig = plt.figure()
-    #plt.imshow(N)
-    h_fig = plt.figure()
-    h_ax = h_fig.add_subplot(111)
-    h_plot = h_ax.pcolormesh(theta_degree, phi_M, N, cmap=my_cmap.cmap_lower_range_transparent(transparency_transition_region=[0.,0.02]))
-    h_ax.set_ylabel('$\\phi_M$')
-    h_ax.set_xlabel('$\\theta$ [$^{{\\circ}}$]')
-    h_cb = plt.colorbar(h_plot, ax=h_ax)
-    h_cb.set_label('$N$ [arb. unit]')
-    plt.tight_layout()
-    plt.show()
+    file1.plot_data(h_fig, h_ax, cmap='gray', vmin=-5, if_colorbar=False, **kwargs)
+    file1.spec_name='driver'
+    file1.open()
+    file1.read_data_slice()
+    file1.close()
+    file1.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_higher_range_transparent(plt.cm.hot), vmin=-18, if_colorbar=False, **kwargs)
+    if trail_spec_name is not None:
+        file1.field_name='charge'
+        file1.spec_name=trail_spec_name
+        file1.open()
+        file1.read_data_slice()
+        file1.close()
+        file1.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_higher_range_transparent(), if_colorbar=False, **kwargs)
+    if laser_field_name is not None:
+        file1.field_name=laser_field_name
+        file1.open()
+        file1.read_data_slice()
+        file1.close()
+        #file1.data_profile2d()
+        #file1.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_lower_range_transparent(plt.cm.Reds, transparency_transition_region=[0.15,0.4]), **kwargs)
+        file1.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_middle_range_transparent(), if_colorbar=False, **kwargs)
+    h_ax.set_ylim([-2.,2.])
+    h_ax.set_aspect('equal','box')
+    return h_fig, h_ax
 
 if __name__ == '__main__':
-    os_pond_scatter3D()
+    h_fig = plt.figure(figsize=[4., 4.])
+    h_ax = h_fig.add_subplot(211)
+    os_beam3D_plot(h_fig, h_ax, out_num=16, laser_field_name='e3')
+
+    delta = 0.7
+    theta = 75.
+    laser_start0 = [23.5, -4.]
+    laser_start = [24., -2.]
+    laser_start[0] = laser_start0[0]+(laser_start[1]-laser_start0[1])/np.tan(theta/180.*np.pi)
+    #print(laser_start)
+    arrow_dz = .8
+    h_ax.arrow(laser_start[0], laser_start[1], arrow_dz, arrow_dz*np.tan(theta/180.*np.pi), width=.05, color='g')
+    arrow_middle_dz = 0.3
+    arrow_r_dz = 1.
+    h_ax.arrow(laser_start[0]+arrow_middle_dz, laser_start[1]+arrow_middle_dz*np.tan(theta/180.*np.pi), arrow_r_dz, -arrow_r_dz/np.tan(theta/180.*np.pi), width=.05, color='g')
+    h_ax.text(25., 1.5, '$z\'$')
+    h_ax.text(25.7, -1.4, '$r\'$')
+    h_ax.add_patch(Arc(laser_start, 1., 1., 0., 0., theta, color='g'))
+    h_ax.text(24.6, -1.8, '$\\theta$')
+    h_ax.set_title(None)
+    h_ax.set_xlabel(None)
+    h_ax.set_ylabel('$k_p x$')
+
+    h_ax = h_fig.add_subplot(212)
+    os_beam3D_plot(h_fig, h_ax, out_num=18, laser_field_name='e3', trail_spec_name='He_e')
+    h_ax.set_title(None)
+    h_ax.set_xlabel('$k_p z$')
+    h_ax.set_ylabel('$k_p x$')
+    plt.tight_layout()
+    plt.show()
