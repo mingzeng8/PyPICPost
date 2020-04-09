@@ -30,7 +30,7 @@ class OutFile:
         self.cyl_m_num = cyl_m_num
         self.cyl_m_re_im = cyl_m_re_im
 
-        self._num_dimensions = 0
+        #self._num_dimensions = 0
         ''' This is moved to self.set_code_name() so that self._axis_labels_original is modified every time code name is changed.
         if self.code_name in {'quickpic', 'hipace'}: self._axis_labels_original = ('$\\xi$', 'x', 'y', '$p_z$', '$p_x$', '$p_y$')
         else: self._axis_labels_original = ('z', 'x', 'y', '$p_z$', '$p_x$', '$p_y$')'''
@@ -255,11 +255,10 @@ class OutFile:
 
 ################################property num_dimensions################################
     def get_num_dimensions(self):
-        #return self._num_dimensions
         return self._num_dimensions
 
     def set_num_dimensions(self, value):
-        raise RuntimeError('You cannot set num_dimensions directly! This number equals self.data.ndim automatically.')
+        raise RuntimeError('You cannot set num_dimensions directly! This number is set by self.open() automatically.')
 
     num_dimensions = property(get_num_dimensions, set_num_dimensions)
 
@@ -651,7 +650,7 @@ class OutFile:
         if self.code_name in {'osiris'}:
             # OSIRIS h5 file has data axes [y,x,z] and AXIS group [z,x,y].
             dir_in_AXIS = dir
-            dir_in_data = self._num_dimensions-1-dir
+            dir_in_data = self.num_dimensions-1-dir
         elif self.code_name in {'quickpic'}:
             # QuickPIC h5 file has data axes [z,y,x] and AXIS group [x,y,z].
             dir_in_AXIS = (dir+2)%3
@@ -724,13 +723,13 @@ class OutFile:
         '''Read data, automatically detect the dimension of data and choose the proper project method'''
         self.read_data()
         project_methods = (self.data_project2d, self.data_project3d)
-        return project_methods[self.num_dimensions-2](*args, **kwargs)
+        return project_methods[self._data.ndim-2](*args, **kwargs)
 
 ################################method data_project################################
     def data_project(self, *args, **kwargs):
         '''Automatically detect the dimension of data and choose the proper project method'''
         project_methods = (self.data_project2d, self.data_project3d)
-        return project_methods[self.num_dimensions-2](*args, **kwargs)
+        return project_methods[self._data.ndim-2](*args, **kwargs)
 
 ################################method data_project3d################################
     def data_project3d(self, dir = 2, if_abs = False, if_square = False):
@@ -747,6 +746,10 @@ class OutFile:
         if dir not in range (3):
             raise ValueError('Project direction should be 0, 1 or 2!')
 
+        self._axis_labels = [self._axis_labels[i] for i in range(len(self._axis_labels)) if i!=dir]
+        self._axis_units = [self._axis_units[i] for i in range(len(self._axis_units)) if i!=dir]
+        self._fig_title = 't = {0:.2f}, {1}projection'.format(self.time, 'absolute value ' if if_abs else '')
+
         # Setting dir_in_AXIS and dir_in_data
         dir_in_AXIS, dir_in_data = self.dirs_in_AXIS_data(dir)
 
@@ -758,16 +761,11 @@ class OutFile:
         if self.code_name in {'quickpic', 'hipace'}:
             # Transpose if because the data axes order is reversed compared to OSIRIS
             self._data = np.transpose(self._data)
-        self._num_dimensions = 2
 
         self._axis_slices = [self._axis_slices[i] for i in range(3) if i!=dir_in_AXIS]
         if self.code_name in {'quickpic'}:
             # Flip for QuickPIC because it has different order in AXIS
             self._axis_slices = np.flip(self._axis_slices)
-
-        self._axis_labels = [self._axis_labels_original[i] for i in range(self._num_dimensions) if i!=dir]
-        self._axis_units = [self._axis_units_original[i] for i in range(self._num_dimensions) if i!=dir]
-        self._fig_title = 't = {0:.2f}, project {1}along {2} direction'.format(self.time, 'absolute value ' if if_abs else '', self._axis_labels_original[dir])
 
 ################################method data_project2d################################
     def data_project2d(self, dir = 1, if_abs = False, if_square = False):
@@ -777,17 +775,16 @@ class OutFile:
         '''
         if dir not in range (2):
             raise ValueError('Project direction should be 0 or 1!')
+        self._axis_slices = [self._axis_slices[1-dir]]
+        self._axis_labels = [self._axis_labels_original[1-dir], None]
+        self._axis_units = [self._axis_units_original[1-dir], None]
+        self._fig_title = 't = {0:.2f}, {1}{2}projection'.format(self.time, 'absolute value ' if if_abs else '', 'squared ' if if_square else '')
         if if_abs:
             self._data = np.absolute(self._data)
         if if_square:
             self._data = np.square(self._data)
         #self._data = np.sum(self._data, axis = 1-dir)/self.fileid[self._data_name_in_file].shape[1-dir]
         self._data = np.sum(self._data, axis = 1-dir)/self._data.shape[1-dir] # Need debugging
-        self._num_dimensions = 1
-        self._axis_slices = [self._axis_slices[1-dir]]
-        self._axis_labels = [self._axis_labels_original[1-dir], None]
-        self._axis_units = [self._axis_units_original[1-dir], None]
-        self._fig_title = 't = {0:.2f}, project {1}along {2} direction'.format(self.time, 'absolute value ' if if_abs else '', self._axis_labels_original[dir])
 
 ################################method data_center_of_mass2d################################
     def data_center_of_mass2d(self, dir = 0, if_abs = True, if_square = False, weigh_threshold=0.):
@@ -795,7 +792,7 @@ class OutFile:
             get a line of the center of mass of a 2D data along "dir" direction.
             self._data will be transformed to a 1D numpy array.
         '''
-        if 2 != self.num_dimensions: raise RuntimeError('Data not 2 dimensional! Exit.')
+        if 2 != self._data.ndim: raise RuntimeError('Data not 2 dimensional! Exit.')
         if dir not in range (2):
             raise ValueError('Direction should be 0 or 1!')
         if 1==dir: weights = self._data
@@ -807,16 +804,18 @@ class OutFile:
         transverse_mgrid = np.mgrid[self._axis_slices[1-dir]]
         # Find the bundary of the data region
         weights_sum = np.sum(weights, axis=1)
-        for i_bund_left in range(weights_sum.shape[0]):
-            if weights_sum[i_bund_left]>weigh_threshold: break
-        if (weights_sum.shape[0]-i_bund_left)<2: raise RuntimeError("Weights are smaller than the threshold. Cannot proceed.")
-        for i_bund_right in range(weights_sum.shape[0], 1, -1):
-            if weights_sum[i_bund_right-1]>weigh_threshold: break
+        weights_sum_max = weights_sum.max()
+        if weights_sum_max>weigh_threshold:
+            for i_bund_left in range(weights_sum.shape[0]):
+                if weights_sum[i_bund_left]>weigh_threshold: break
+            for i_bund_right in range(weights_sum.shape[0], 1, -1):
+                if weights_sum[i_bund_right-1]>weigh_threshold: break
+        else: raise RuntimeError("Weights maximum = {} < threshold. Cannot proceed.".format(weights_sum_max))
         center_of_mass_len = i_bund_right-i_bund_left
         center_of_mass = np.zeros(center_of_mass_len)
         for i in range(center_of_mass_len):
             # The weight may still have small values in the range between i_bund_left and i_bund_right
-            if weights_sum[i+i_bund_left]>weigh_threshold: center_of_mass[i] = np.average(transverse_mgrid, weights=weights[i+i_bund_left])
+            if weights_sum[i+i_bund_left]>0: center_of_mass[i] = np.average(transverse_mgrid, weights=weights[i+i_bund_left])
         self._data = center_of_mass
         #print(self._data)
         whole_slice = self._axis_slices[dir]
@@ -1063,7 +1062,7 @@ class OutFile:
     def isosurface_data_3d(self, h_fig=None, h_ax=None, **kwargs):
         '''Plot 3D data as isosurface.'''
         if self._data.ndim!=3:
-            raise RuntimeError('Data is not two dimensional! The OutFile.isosurface_data_3d() method cannot proceed.')
+            raise RuntimeError('Data is not 3 dimensional! The OutFile.isosurface_data_3d() method cannot proceed.')
         raise NotImplementedError('3D data plot not implemented')
 
 ################################method plot_raw_hist_p1################################
@@ -1197,10 +1196,9 @@ class OutFile:
             except: print("Warning: particle select condition is not valid! All particles are used.")
         self._data, yedges, xedges = np.histogram2d(y_array, x_array, bins=num_bins, range=range, weights=weights)
         #self._data=np.transpose(self._data)
-        self._num_dimensions = 2
         self._axis_slices = [slice(xedges[0], xedges[-1], xedges[1]-xedges[0]), slice(yedges[0], yedges[-1], yedges[1]-yedges[0])]
         self._axis_units = [None,None]
-        self._fig_title = 'Phasespace'
+        self._fig_title = 't = {0:.2f}, phasespace'.format(self.time)
         return
 
 ################################method plot_raw_hist2D################################
@@ -1232,7 +1230,7 @@ class OutFile:
     def plot_data(self, *args, **kwargs):
         '''Automatically detect the dimension of data and choose the proper plot method'''
         plot_methods = (self.plot_data_line, self.pcolor_data_2d, self.isosurface_data_3d)
-        h_fig, h_ax = plot_methods[self.num_dimensions-1](*args, **kwargs)
+        h_fig, h_ax = plot_methods[self._data.ndim-1](*args, **kwargs)
         h_ax.minorticks_on()
         return h_fig, h_ax
 
@@ -1609,7 +1607,7 @@ if __name__ == '__main__':
         plt.tight_layout()
         plt.show()
     def beam_measure_beam3D():
-        file1 = OutFile(code_name='osiris',path='/home/zming/mnt/JSCRATCH/os_beam3D/os_beam3D158',field_name='raw',spec_name='He_e',out_num=40)
+        file1 = OutFile(code_name='osiris',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_beam3D/os_beam3D160',field_name='raw',spec_name='He_e',out_num=52)
         file1.open()
         file1.read_raw_q()
         file1.read_raw_p1()
@@ -1618,19 +1616,21 @@ if __name__ == '__main__':
         file1.read_raw_x3()
         file1.read_raw_p3()
         file1.read_raw_ene()
-        #file1.select_raw_data(ene_low=2199.)
+        file1.select_raw_data(r_up=0.2)
         ene_avg, ene_rms_spread = file1.raw_mean_rms_ene(if_select=True)
         emittance, twiss_parameters =file1.calculate_norm_rms_emittance_um(4.9e16, directions=(2,3), if_select=True)
-        h_fig, h_ax = file1.plot_raw_hist2D(dims='p1x1', if_select=True, if_log_colorbar=True)
-        file1.data_project()
-        file1.plot_data(h_fig, h_ax)
+        h_fig, h_ax = file1.plot_raw_hist2D(dims='x2x1', if_select=True, if_log_colorbar=True)
+        #file1.data_center_of_mass2d(weigh_threshold=1e1)
+        h_ax2 = h_ax.twinx()
+        file1.data2D_slice_spread(weigh_threshold=1e2)
+        file1.plot_data(h_fig, h_ax2, if_title=False, c='r')
         print('Q = {} pC'.format(file1.calculate_q_pC(4.9e16, if_select=True)))
         print('E = {} +- {} MeV'.format(ene_avg*0.511, ene_rms_spread*0.511))
         print('epsilon_x_norm = {} um, epsilon_y_norm = {} um'.format(emittance[0], emittance[1]))
         file1.close()
         plt.show()
     def beam_measure_hi():
-        file1 = OutFile(code_name='hipace',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_beam3D/hi_beam3D155',field_name='raw',spec_name='trailer',out_num=490)
+        file1 = OutFile(code_name='hipace',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_beam3D/newhi_beam3D155',field_name='raw',spec_name='trailer',use_num_list=True,out_num=500)
         file1.open()
         file1.read_raw_q()
         file1.read_raw_p1()
@@ -1639,17 +1639,20 @@ if __name__ == '__main__':
         file1.read_raw_x3()
         file1.read_raw_p3()
         file1.read_raw_ene()
-        #file1.select_raw_data(ene_low=2199.)
+        file1.select_raw_data(r_up=0.2)
         ene_avg, ene_rms_spread = file1.raw_mean_rms_ene(if_select=True)
         emittance, twiss_parameters =file1.calculate_norm_rms_emittance_um(4.9e16, directions=(2,3), if_select=True)
-        h_fig, h_ax = file1.plot_raw_hist2D(dims='p1x1', if_select=True, if_log_colorbar=True)
+        h_fig, h_ax = file1.plot_raw_hist2D(dims='p1x1', num_bins = [1024,64], if_select=True, if_log_colorbar=True)
+        h_ax2 = h_ax.twinx()
+        file1.data2D_slice_spread(weigh_threshold=5e1)
+        file1.plot_data(h_fig, h_ax2, if_title=False, c='r')
         print('Q = {} pC'.format(file1.calculate_q_pC(4.9e16, if_select=True)))
         print('E = {} +- {} MeV'.format(ene_avg*0.511, ene_rms_spread*0.511))
         print('epsilon_x_norm = {} um, epsilon_y_norm = {} um'.format(emittance[0], emittance[1]))
         file1.close()
         plt.show()
     def beam_measure():
-        file1 = OutFile(code_name='osiris',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1/2020_3_24_plasma_profile_tailoring/scan_2020_2_11_ArII0.33preion_np1.0_y_0um',field_name='raw',spec_name='driver',out_num=347)
+        file1 = OutFile(code_name='osiris',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1/2020_4_6_ArII0.15preion/np1.4/y_0um',field_name='raw',spec_name='ramp',out_num=165)
         file1.open()
         file1.read_raw_q()
         file1.read_raw_p1()
@@ -1665,11 +1668,11 @@ if __name__ == '__main__':
         print('Q = {} pC'.format(file1.calculate_q_pC(2.824e19, if_select=True)))
         print('E = {} +- {} MeV'.format(ene_avg*0.511, ene_rms_spread*0.511))
         print('epsilon_x_norm = {} um, epsilon_y_norm = {} um'.format(emittance[0], emittance[1]))
-        h_fig, h_ax = file1.plot_raw_hist2D(dims='x2x1', if_select=True, if_log_colorbar=True)
-        bottom = file1._axis_slices[1].start
-        top = file1._axis_slices[1].stop
-        file1.data_project2d(dir=1)
-        file1.plot_data(h_fig, h_ax, c='r', offset=bottom, multiple=(top-bottom)/np.max(file1._data))
+        h_fig, h_ax = file1.plot_raw_hist2D(dims='p1x1', if_select=True, if_log_colorbar=True, if_colorbar=False)
+        h_ax2 = h_ax.twinx()
+        file1.data2D_slice_spread(weigh_threshold=1.e-2)
+        file1.plot_data(h_fig, h_ax2, if_title=False)
+        file1.plot_data(h_fig, h_ax2, c='r', if_title=False)
         file1.close()
         plt.show()
     def test_os():
@@ -1688,7 +1691,6 @@ if __name__ == '__main__':
         file1 = OutFile(code_name='hipace',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_beam3D/hi_beam3D155',field_name='raw', spec_name='trailer', out_num=490)
         file1.open()
         h_fig, h_ax = file1.plot_raw_hist2D(dims='p1x1', if_select=True, if_log_colorbar=True)
-        print(file1.num_dimensions)
         file1.close()
         #file1.data_center_of_mass2d(weigh_threshold=0.1)
         #file1.plot_data(h_fig, h_ax)
