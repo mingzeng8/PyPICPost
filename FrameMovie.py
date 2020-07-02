@@ -4,9 +4,12 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import warnings
+# Do not have to start X-server. Save figures instead of show them.
+import matplotlib as mpl
+mpl.use('Agg')
 
 class Frames:
-    def __init__(self, code_name = 'osiris', simulation_path = None, frame_folder = None, plot_type = 'laser_driven', plot_spec_name=None, average='', use_num_list = False, start_num = 0, stride_num=1, count_num=1, driver_spec_name='driver', driver_vmin=None, driver_vmax=None, background_spec_name='e', background_vmin=None, background_vmax=None, trail_spec_name=None, trail_vmin=None, trail_vmax=None, if_e1=False, e1_multiple=1., if_psi=False, psi_multiple=1., if_driver_cm=False, if_trail_cm=False, dir=2, save_type='png', max_missing_file=0):
+    def __init__(self, code_name = 'osiris', simulation_path = None, frame_folder = None, plot_type = 'laser_driven', plot_spec_name=None, average='', use_num_list = False, start_num = 0, stride_num=1, count_num=1, driver_spec_name='driver', driver_vmin=None, driver_vmax=None, background_spec_name='e', background_vmin=None, background_vmax=None, trail_spec_name=None, trail_vmin=None, trail_vmax=None, if_e1=False, e1_multiple=1., if_psi=False, psi_multiple=1., if_driver_cm=False, if_trail_cm=False, dir=2, save_type='png', max_missing_file=0, plot_range=None):
         self.code_name = code_name
         self.simulation_path = simulation_path
         if frame_folder is None:
@@ -14,7 +17,8 @@ class Frames:
             elif code_name == 'hipace': frame_pref = 'hi_Frames'
             elif code_name == 'quickpic': frame_pref = 'qp_Frames'
             else: raise NotImplementedError('code_name {} not implemented.'.format(code_name))
-            if dir==0: frame_surf = 'slice_x-y'
+            if plot_type not in {'laser_driven', 'beam_driven'}: frame_surf = '{}_{}'.format(plot_spec_name, plot_type)
+            elif dir==0: frame_surf = 'slice_x-y'
             elif dir==1: frame_surf = 'slice_y-z'
             elif dir==2: frame_surf = 'slice_x-z'
             else: raise ValueError('dir should be 1, 2 or 3.')
@@ -49,6 +53,7 @@ class Frames:
         self.save_type = save_type
         #allowed number of missing files when doing plot loop. In HiPACE sometimes there are missing output files.
         self.max_missing_file = max_missing_file
+        self.plot_range = plot_range
         # Initialize outfile object, especially initialize avail_num_list if use_num_list.
         if ('beam_driven' == self.plot_type) or ('laser_driven' == self.plot_type):
             self.outfile = outfile.OutFile(code_name = code_name, path=simulation_path, field_name='charge', average=average, spec_name=background_spec_name, use_num_list = use_num_list, out_num=start_num)
@@ -273,7 +278,7 @@ class Frames:
         self.outfile.out_num=out_num
         h_ax = h_fig.add_subplot(111)
         self.outfile.open()
-        self.outfile.plot_raw_hist2D(h_fig, h_ax, dims=self.plot_type, cmap=my_cmap.cmap_lower_range_transparent(), if_log_colorbar=False)
+        self.outfile.plot_raw_hist2D(h_fig, h_ax, dims=self.plot_type, cmap=my_cmap.cmap_lower_range_transparent(), if_log_colorbar=False, range=self.plot_range)
         self.outfile.close()
         plt.tight_layout()
         return h_fig
@@ -323,15 +328,16 @@ class Frames:
 #        subprocess.call('mencoder \'{0}/*.png\' -mf type=png:fps=10 -ovc lavc -lavcopts vcodec=wmv2 -oac copy -o {0}/movie.mpg'.format(self.frame_path), shell=True)
 
 if __name__ == '__main__':
-    #frame1 = Frames(simulation_path = '/home/zming/mnt/JSCRATCH/os_beam3D/os_beam3D155_HR', plot_type = 'beam_driven', start_num = 0, stride_num=1, count_num=99999, background_spec_name='e', background_vmin=-5, driver_spec_name='driver', driver_vmin=-10, trail_spec_name='He_e', trail_vmax=0., trail_vmin=-2., if_e1=True, if_psi=True, dir=1)
-    frame1 = Frames(code_name = 'hipace', simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_beam3D/newhi_beam3D161', plot_type = 'beam_driven', use_num_list = True, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-5, driver_spec_name='driver', driver_vmin=-20, if_e1=True, if_psi=True, trail_spec_name='trailer', trail_vmax=0, trail_vmin=-30, dir=2)
-    #frame1 = Frames(code_name = 'hipace', simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1/scan_2020_1_29_driver_profile_scan/density0.6/zc1_1_hi0.1den_renorm', plot_type = 'beam_driven', use_num_list = True, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma_charge', background_vmax=0., background_vmin=-1e1, driver_spec_name='beam_charge', driver_vmin=-1e2, if_e1=True, e1_multiple=1e1, if_psi=False, dir=2)
-    #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/simulations/os2D/os_DRI3D19', frame_folder='x3p3', plot_type = 6, start_num = 37, stride_num=1, count_num=99999, trail_spec_name='plasma')
+    #frame1 = Frames(simulation_path = '/home/zming/mnt/JSCRATCH/os_beam3D/os_beam3D227', plot_type = 'beam_driven', start_num = 13, stride_num=1, count_num=99999, background_spec_name='e', background_vmin=-5, driver_spec_name='driver', driver_vmin=-10, trail_spec_name='He_e', trail_vmax=0., trail_vmin=-20., if_e1=True, if_psi=True, dir=2)
+    #frame1 = Frames(simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_beam3D/os_beam3D259', plot_type = 'beam_driven', start_num = 0, stride_num=1, count_num=99999, background_spec_name='e', background_vmin=-5, driver_spec_name='driver', driver_vmin=-10, trail_spec_name='He_e', trail_vmax=0., trail_vmin=-20., if_e1=True, if_psi=True, dir=1)
+    #frame1 = Frames(code_name = 'hipace', simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_qp_compare/hi3', plot_type = 'beam_driven', use_num_list = True, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-5, driver_spec_name='driver', driver_vmin=-50, if_e1=True, if_psi=True, trail_spec_name='trailer', trail_vmax=0, trail_vmin=-30, dir=2)
+    frame1 = Frames(code_name = 'hipace', simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_beam3D/newhi_beam3D259', plot_type = 'beam_driven', use_num_list = True, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-5, driver_spec_name='driver', driver_vmin=-50, if_e1=True, if_psi=True, trail_spec_name='trailer', trail_vmax=0, trail_vmin=-30, dir=2)
+    #frame1 = Frames(code_name = 'hipace', simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_beam3D/newhi_beam3D259', plot_type = 'p2x2', plot_spec_name='trailer', use_num_list = True, start_num = 0, stride_num=1, count_num=999999, plot_range=[[-5.,5.],[-0.5,0.5]])
     #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/simulations/os2D/os_DRI3D19', plot_type = 0, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-10, driver_spec_name='beam-driver', driver_vmin=-5, if_e1=True, if_psi=False, dir=1)
-    #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/mnt/JSCRATCH/X1/2020_2_4_plasma_profile_tailoring', frame_folder='os_Frames/ramp_p2x2', plot_type = 'p2x2', plot_spec_name = 'ramp', start_num = 0, stride_num=1, count_num=99999)
+    #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/mnt/JSCRATCH/X1/scan_2020_6_10/tailoring7', plot_type = 'beam_driven', start_num = 0, count_num=99999, background_spec_name='plasma', background_vmin=-1.e-3, driver_spec_name='driver', driver_vmin=-1.e-2, trail_spec_name='ramp', trail_vmax=0., trail_vmin=-1.e-3, if_e1=True, if_psi=True, dir=2)
     #frame1 = Frames(simulation_path = '/home/zming/mnt/JSCRATCH/os_PT3D27', frame_folder='Frames/p1x1', plot_type = 'p1x1', start_num = 1, stride_num=1, count_num=99999, trail_spec_name='plasma')
     #frame1 = Frames(simulation_path = '/home/zming/mnt/JSCRATCH/os_PT3D27', frame_folder='Frames/laser_profile_slice_x-z', plot_type = 'laser_driven', average='-savg', start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-5., trail_spec_name=None, if_e1=False, if_psi=False, dir=2)
-    #frame1 = Frames(code_name = 'osiris', simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1/2020_4_6_ArII0.15preion/np1.4/y_-40um', plot_type = 'beam_driven', plot_spec_name = 'driver' , start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-0.002, driver_spec_name='driver', driver_vmin=-0.005, trail_spec_name='ramp', trail_vmax=0, trail_vmin=-0.002, if_driver_cm=False, if_trail_cm=False, if_e1=True, e1_multiple=1e3, if_psi=False, dir=2)
+    #frame1 = Frames(simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1/2020_4_21_plasma_profile_tailoring/n1e16/I5e14', plot_type = 'beam_driven', start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-0.002, driver_spec_name='driver', driver_vmin=-0.005, trail_spec_name='ramp', trail_vmax=0, trail_vmin=-0.002, if_driver_cm=False, if_trail_cm=False, if_e1=True, e1_multiple=1e3, if_psi=False, dir=1)
     #frame1 = Frames(code_name = 'hipace', simulation_path = '/home/zming/mnt/JSCRATCH/50um600pC1.1e16th_mdmt_cold', plot_type = 'beam_driven', plot_spec_name = 'driver', use_num_list = True, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma_electrons', background_vmin=-10, driver_spec_name='driver', driver_vmin=-10, trail_spec_name='trailer', trail_vmax=0, trail_vmin=-30, if_driver_cm=True, if_trail_cm=True, dir=1)
     #frame1 = Frames(code_name = 'osiris', simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_pond_scatter3D/os_pond_scatter3D6', plot_type = 'laser_driven', start_num = 0, stride_num=1, count_num=99999, background_spec_name='e', dir=2)#, background_vmin=-.2
     frame1.save_frames()

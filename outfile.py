@@ -16,7 +16,7 @@ import my_cmap
 float_type=np.float64
 
 class OutFile:
-    def __init__(self, code_name = 'osiris', path = '.', out_type = None, field_name = 'e3', spec_name = '', use_num_list = False, out_num = 0, average='', cyl_m_num = 0, cyl_m_re_im='re'):
+    def __init__(self, code_name = 'osiris', path = '.', out_type = None, field_name = 'e3', spec_name = '', use_num_list = False, out_num = 0, average='', fld_slice=None, cyl_m_num = 0, cyl_m_re_im='re'):
 ##value digit_num##
         self._accepted_code_name = {'osiris', 'quickpic', 'hipace'}
         self.code_name = code_name.lower()
@@ -26,6 +26,8 @@ class OutFile:
         #self.out_type = out_type
         self.field_name = field_name
         self.average = average
+        # fld_slice can be 1, 2 or 3 (for QuickPIC)
+        self.fld_slice = fld_slice
         #2D cylindrical modes for fields
         self.cyl_m_num = cyl_m_num
         self.cyl_m_re_im = cyl_m_re_im
@@ -55,7 +57,8 @@ class OutFile:
         if value not in self._accepted_code_name:
             raise ValueError('code_name \'{0}\' not implemented!'.format(value))
         self._code_name = value
-        if value in {'quickpic', 'hipace'}: self._axis_labels_original = ('$\\xi$', 'x', 'y', '$p_z$', '$p_x$', '$p_y$')
+        if value=='quickpic': self._axis_labels_original = ('$\\xi$', 'x', 'y', '$p_z$', '$p_x$', '$p_y$')
+        elif value=='hipace': self._axis_labels_original = ('$\\zeta$', 'x', 'y', '$p_z$', '$p_x$', '$p_y$')
         else: self._axis_labels_original = ('z', 'x', 'y', '$p_z$', '$p_x$', '$p_y$')
         if 'quickpic' == self.code_name: self.digit_num = 8
         else: self.digit_num = 6
@@ -204,12 +207,26 @@ class OutFile:
                 self._prefix_filename = '{0}/{1}-tracks.h5'.format(main_folder_path, self.spec_name)
         elif 'quickpic' == self.code_name:
             field_name_dict = {'charge':'Charge', 'e1':'Ez', 'e2':'Ex', 'e3':'Ey', 'b1':'Bz', 'b2':'Bx', 'b3':'By', 'psi':'Psi'}
+            # For slice outputs of quickpic
+            slc_dic = {1:'xz', 2:'yz', 3:'xy'}
             if 'DENSITY' == self._out_type:
-                self._prefix_filename = '{0}/{1}/{2}/{3}_'.format(self.path, self.spec_name, field_name_dict[self.field_name], self.field_name)
+                if self.fld_slice is None:
+                    fld_name1 = field_name_dict[self.field_name]
+                    fld_name2 = self.field_name
+                else:
+                    fld_name1 = '{}_slice_000{}'.format(field_name_dict[self.field_name], self.fld_slice)
+                    fld_name2 = '{}_slice_{}'.format(self.field_name, slc_dic[self.fld_slice])
+                self._prefix_filename = '{0}/{1}/{2}/{3}_'.format(self.path, self.spec_name, fld_name1, fld_name2)
             elif 'FLD' == self._out_type:
-                self._prefix_filename = '{0}/Fields/{1}/{2}_'.format(self.path, field_name_dict[self.field_name], field_name_dict[self.field_name].lower())
+                if self.fld_slice is None:
+                    fld_name1 = field_name_dict[self.field_name]
+                    fld_name2 = field_name_dict[self.field_name].lower()
+                else:
+                    fld_name1 = '{}_slice000{}'.format(field_name_dict[self.field_name], self.fld_slice)
+                    fld_name2 = '{}slice{}'.format(field_name_dict[self.field_name].lower(), slc_dic[self.fld_slice])
+                self._prefix_filename = '{0}/Fields/{1}/{2}_'.format(self.path, fld_name1, fld_name2)
             elif 'RAW' == self._out_type:
-                self._prefix_filename = '{0}/{1}/RAW-{1}-'.format(main_folder_path, self.spec_name)
+                self._prefix_filename = '{0}/{1}/Raw/raw_'.format(self.path, self.spec_name)
         elif 'hipace' == self.code_name:
             main_folder_path = '{}/DATA'.format(self.path)
             if 'DENSITY' == self._out_type:
@@ -290,9 +307,13 @@ class OutFile:
     time = property(get_time, set_time)
 
 ################################method open################################
-    def open(self, filename=None):
+    def open(self, filename=None, t_offset = None):
         '''
             The normal use is to let the code determin file name according to the PIC code's file name regulation. In some cases one may need to set file name manually, so one may provide filename in the argument.
+        filename: None or string.
+                  The path to an output h5 file. If None, automatically set the path.
+        t_offset: None or float.
+                  If not None, self._time will have an offset respect to the time read from attribute 'TIME' of the h5 file.
         '''
         if self._out_type not in self._accepted_out_type: raise NotImplementedError('Out type {} not implemented!'.format(self._out_type))
         if filename is None: filename=self.path_filename
@@ -314,19 +335,18 @@ class OutFile:
                     elif 1==self._num_dimensions: self._h5_data_seq = [0]'''
 ##value _axis_range##
                 self._axis_range = np.zeros((2,self._num_dimensions), dtype=float_type)
+                self._axis_labels = []
+                self._axis_units = []
                 for i in range(self._num_dimensions):
                     self.fileid['AXIS/AXIS{0}'.format(i+1)].read_direct(self._axis_range, np.s_[:], np.s_[:,i])
+                    self._axis_labels.append('${}$'.format(self.fileid['AXIS/AXIS{0}'.format(i+1)].attrs.get('NAME')[0].decode("utf-8")))
+                    self._axis_units.append('${}$'.format(self.fileid['AXIS/AXIS{0}'.format(i+1)].attrs.get('UNITS')[0].decode("utf-8")))
             except KeyError:
                 #when 'AXIS' does not exist, eg. output from HiPACE or RAW in osiris, read from the attribute
                 xmax = self.fileid.attrs.get('XMAX')
                 xmin = self.fileid.attrs.get('XMIN')
                 nx = self.fileid.attrs.get('NX')
                 self._num_dimensions = len(xmax)
-                ''' Deprecated
-                if self.code_name in {'osiris'}:
-                    # For OSIRIS, modifiy self._h5_data_seq for 2d and 1d cases
-                    if 2==self._num_dimensions: self._h5_data_seq = [1,0]
-                    elif 1==self._num_dimensions: self._h5_data_seq = [0]'''
 ##value _axis_range##
                 self._axis_range = np.zeros((2,self._num_dimensions), dtype=float_type)
                 for i in range(self._num_dimensions):
@@ -350,6 +370,7 @@ class OutFile:
             #elif 'hipace' == self.code_name:
             self._cell_size = (self._axis_range[1, :] - self._axis_range[0, :]) / nx
             self._time = self.fileid.attrs['TIME'][0]
+            if t_offset is not None: self._time += t_offset
 
 ################################method close################################
     def close(self):
@@ -634,8 +655,10 @@ class OutFile:
             self._axis_labels = [self._axis_labels_original[0], self._axis_labels_original[3]]
             self._axis_units = [self._axis_units_original[0], self._axis_units_original[3]]
         else:
-            self._axis_labels = [self._axis_labels_original[i] for i in range(self._num_dimensions)]
-            self._axis_units = [self._axis_units_original[i] for i in range(self._num_dimensions)]
+            pass
+            # self._axis_labels and self._axis_units already set in open()
+            #self._axis_labels = [self._axis_labels_original[i] for i in range(self._num_dimensions)]
+            #self._axis_units = [self._axis_units_original[i] for i in range(self._num_dimensions)]
         self._fig_title = 't = {0:.2f}'.format(self.time)
 
 ################################method dirs_in_AXIS_data################################
@@ -829,7 +852,7 @@ class OutFile:
         return i_bund_left, center_of_mass_len
 
 ################################method data2D_slice_spread################################
-    def data2D_slice_spread(self, dir = 0, method = 'rms', weigh_threshold=0.):
+    def data2D_slice_spread(self, dir = 0, method = 'rms', weigh_threshold=0., relative_spread= False):
         '''
             Get a slice spread of a 2D data along "dir" direction.
             self._data will be transformed to a 1D numpy array.
@@ -851,6 +874,8 @@ class OutFile:
         else:
             # Not implemented
             raise NotImplementedError('method {} not implemented yet.'.format(method))
+        # If relative_spread, transform to relative spread
+        if relative_spread: spread_array/=self._data
         self._data = spread_array
         self._fig_title = 't = {0:.2f}, slice spread'.format(self.time)
         self._axis_labels[1] = '$\\Delta$'+self._axis_labels[1]
@@ -984,8 +1009,11 @@ class OutFile:
         # not yet finished. Currently this can only work with dir=0.
 
 ################################method plot_data_line################################
-    def plot_data_line(self, h_fig=None, h_ax=None, if_flip_xy=False, semilogy=False, if_xlabel=None, if_ylabel=None, if_title=None, multiple=1., offset=0., **kwargs):
-        '''Plot 1D data in a line. h_ax is the handle of the axis to be plotted on. If h_ax=None, a new figure and axis is created.'''
+    def plot_data_line(self, h_fig=None, h_ax=None, if_flip_xy=False, semilogy=False, if_xlabel=None, if_ylabel=None, if_title=None, multiple=1., offset=0., if_z2zeta=False, **kwargs):
+        '''Plot 1D data in a line. h_ax is the handle of the axis to be plotted on. If h_ax=None, a new figure and axis is created.
+        if_z2zeta: boolean
+                   If True, offset x axis by -t (thus it is effectively zeta=z-t)
+        '''
         if self._data.ndim!=1:
             raise RuntimeError('Data is not one dimensional! The OutFile.plot_data_line() method cannot proceed.')
         if h_fig is None:
@@ -996,14 +1024,18 @@ class OutFile:
             plotfunc=h_ax.semilogy
         else:
             plotfunc=h_ax.plot
+        if if_z2zeta:
+            x_slice = slice(self._axis_slices[0].start-self.time, self._axis_slices[0].stop-self.time, self._axis_slices[0].step)
+        else:
+            x_slice = self._axis_slices[0]
         if if_flip_xy:
-            plotfunc((self._data*multiple)+offset, np.mgrid[self._axis_slices[0]], **kwargs)
+            plotfunc((self._data*multiple)+offset, np.mgrid[x_slice], **kwargs)
             set_xlabel = h_ax.set_ylabel
             set_ylabel = h_ax.set_xlabel
             get_xlabel = h_ax.get_ylabel
             get_ylabel = h_ax.get_xlabel
         else:
-            plotfunc(np.mgrid[self._axis_slices[0]], (self._data*multiple)+offset, **kwargs)
+            plotfunc(np.mgrid[x_slice], (self._data*multiple)+offset, **kwargs)
             set_xlabel = h_ax.set_xlabel
             set_ylabel = h_ax.set_ylabel
             get_xlabel = h_ax.get_xlabel
@@ -1028,11 +1060,24 @@ class OutFile:
         return h_fig, h_ax
 
 ################################method pcolor_data_2d################################
-    def pcolor_data_2d(self, h_fig=None, h_ax=None, if_colorbar=True, colorbar_orientation='vertical', if_log_colorbar=False, vmin=None, vmax=None, cmap=plt.cm.jet, alpha=None, **kwargs):
-        '''Plot 2D data in as pcolor'''
+    def pcolor_data_2d(self, h_fig=None, h_ax=None, if_colorbar=True, colorbar_orientation='vertical', if_log_colorbar=False, vmin=None, vmax=None, cmap=plt.cm.jet, alpha=None, if_z2zeta=False, if_transpose=False, **kwargs):
+        '''Plot 2D data in as pcolor
+        if_z2zeta: boolean
+                   If True, offset x axis by -t (thus it is effectively zeta=z-t)
+        if_transpose: boolean
+                   If True, transpose the plot (which is useful for QuickPIC)'''
         if self._data.ndim!=2:
             raise RuntimeError('Data is not two dimensional! The OutFile.pcolor_data_2d() method cannot proceed.')
-        y_spread, x_spread = np.mgrid[self._axis_slices[1], self._axis_slices[0]]
+        if if_transpose:
+            self._data = np.transpose(self._data)
+            self._axis_slices = np.flip(self._axis_slices)
+            self._axis_labels = np.flip(self._axis_labels)
+            self._axis_units = np.flip(self._axis_units)
+        if if_z2zeta:
+            x_slice = slice(self._axis_slices[0].start-self.time, self._axis_slices[0].stop-self.time, self._axis_slices[0].step)
+        else:
+            x_slice = self._axis_slices[0]
+        y_spread, x_spread = np.mgrid[self._axis_slices[1], x_slice]
         if h_fig is None:
             h_fig = plt.figure()
         if h_ax is None:
@@ -1110,6 +1155,45 @@ class OutFile:
             range_min = gamma.min()
         hist, bin_edges = np.histogram(gamma, num_bins, (range_min, range_max), weights=weights)
         bin_edges = bin_edges[0:-1]
+        return bin_edges, hist
+
+################################method raw_hist_current################################
+    def raw_hist_current(self, n0_per_cc, dir=1, num_bins=256, range_max=None, range_min=None, if_select = False, if_abs=True):
+        '''Get histogram for current distribution.
+        dir : integer
+              The longitudinal direction. 1 for z, 2 for x, 3 for y.
+        n0_per_cc : float
+              the normalization density in cm^-3'''
+        if if_abs: q=np.absolute(self._raw_q)
+        else: q=self._raw_q
+        if 1==dir: z=self._raw_x1
+        elif 2==dir: z=self._raw_x2
+        elif 3==dir: z=self._raw_x3
+        else: raise KeyError('dir should be 1, 2 or 3.')
+        if if_select:
+            try:
+                q = q[self._raw_select_index]
+                z = z[self._raw_select_index]
+            except: print("Warning: particle select condition is not valid! All particles are used.")
+        if range_max is None:
+            range_max = z.max()
+        if range_min is None:
+            range_min = z.min()
+        hist, bin_edges = np.histogram(z, num_bins, (range_min, range_max), weights=q, density=False)
+        bin_edges = bin_edges[0:-1]
+
+        # Transform charge to Coulomb
+        cell_volume_norm = 1.0
+        for i in range(self.num_dimensions):
+            cell_volume_norm = cell_volume_norm*self._cell_size[i]
+        if 3>self.num_dimensions:
+            print('Warning! Similation is in {} dimensional. Charge calculation may not be correct.'.format(self.num_dimensions))
+        hist *= (cell_volume_norm/np.sqrt(n0_per_cc)*2.404351211612064e-2)
+
+        # Transform to Amper
+        one_over_k0_m_square = 2.8239587227915743e7/n0_per_cc
+        hist /= (bin_edges[1]-bin_edges[0])*one_over_k0_m_square**0.5/2.99792458e8
+
         return bin_edges, hist
 
 ################################method plot_raw_hist_gamma################################
@@ -1202,7 +1286,7 @@ class OutFile:
         return
 
 ################################method plot_raw_hist2D################################
-    def plot_raw_hist2D(self, h_fig=None, h_ax=None, dims='p1x1', num_bins=128, range=None, cmap=None, if_select = False, **kwargs):
+    def plot_raw_hist2D(self, h_fig=None, h_ax=None, dims='p1x1', num_bins=128, range=None, if_select = False, **kwargs):
         '''Plot 2D histogram for phasespace from raw data.
            Please make sure the corresponding raw data is read before calling this.
            dims can be combinations of 'x1', 'x2', 'x3', 'p1', 'p2', 'p3'.'''
@@ -1353,19 +1437,16 @@ if __name__ == '__main__':
     out_num=1
     def tmp_3D():
         h_fig = plt.figure(figsize=(5,5))
-        file1 = OutFile(code_name='osiris',path='/home/zming/mnt/JSCRATCH/X1/scan_2020_1_14/He_Ar_2.0/1.0', field_name='charge', spec_name='plasma', out_num=64)
+        file1 = OutFile(path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_beam3D/os_beam3D146', field_name='e1', out_num=52)
         h_ax = h_fig.add_subplot(111)
         file1.open()
-        file1.read_data_slice(dir=1)
-        tmp_data = file1._data
-        file1.close()
-        file1.spec_name='ramp'
-        file1.open()
-        file1.read_data_slice(dir=1)
-        file1._data +=tmp_data
-        file1.plot_data(h_fig, h_ax, vmin=-0.001)#, cmap=my_cmap.cmap_higher_range_transparent())
+        file1.read_data_slice()
+        file1.plot_data(h_fig, h_ax)#, cmap=my_cmap.cmap_higher_range_transparent())
         h_ax.set_aspect('equal','box')
-
+        file1.read_data()
+        file1.close()
+        E=file1._data
+        print('E_max = {}, E_min = {}'.format(E.max(), E.min()))
         plt.tight_layout()
         plt.show()
     def X1plot():
@@ -1607,7 +1688,7 @@ if __name__ == '__main__':
         plt.tight_layout()
         plt.show()
     def beam_measure_beam3D():
-        file1 = OutFile(code_name='osiris',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_beam3D/os_beam3D160',field_name='raw',spec_name='He_e',out_num=52)
+        file1 = OutFile(code_name='osiris',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_beam3D/os_beam3D247',field_name='raw',spec_name='He_e',use_num_list=True,out_num=35)
         file1.open()
         file1.read_raw_q()
         file1.read_raw_p1()
@@ -1616,21 +1697,27 @@ if __name__ == '__main__':
         file1.read_raw_x3()
         file1.read_raw_p3()
         file1.read_raw_ene()
-        file1.select_raw_data(r_up=0.2)
+        #file1.select_raw_data(ene_low=10.)
+        print('gamma_min = {}'.format(file1._raw_ene.min()+1.))
+        print('gamma_max = {}'.format(file1._raw_ene.max()+1.))
         ene_avg, ene_rms_spread = file1.raw_mean_rms_ene(if_select=True)
         emittance, twiss_parameters =file1.calculate_norm_rms_emittance_um(4.9e16, directions=(2,3), if_select=True)
-        h_fig, h_ax = file1.plot_raw_hist2D(dims='x2x1', if_select=True, if_log_colorbar=True)
+        h_fig, h_ax = file1.plot_raw_hist2D(dims='p2x2', if_select=True, if_log_colorbar=True)
         #file1.data_center_of_mass2d(weigh_threshold=1e1)
-        h_ax2 = h_ax.twinx()
-        file1.data2D_slice_spread(weigh_threshold=1e2)
-        file1.plot_data(h_fig, h_ax2, if_title=False, c='r')
+        #h_ax2 = h_ax.twinx()
+        #file1.data2D_slice_spread(weigh_threshold=1e-1)
+        #file1.plot_data(h_fig, h_ax2, if_title=False, c='r')
+        #h_axt = h_ax.twinx()
+        #z, I = file1.raw_hist_current(n0_per_cc=4.9e16, num_bins=32, if_select=True)
+        #h_axt.plot(z,I, c='b')
+        print('t = {}'.format(file1.time))
         print('Q = {} pC'.format(file1.calculate_q_pC(4.9e16, if_select=True)))
         print('E = {} +- {} MeV'.format(ene_avg*0.511, ene_rms_spread*0.511))
         print('epsilon_x_norm = {} um, epsilon_y_norm = {} um'.format(emittance[0], emittance[1]))
         file1.close()
         plt.show()
     def beam_measure_hi():
-        file1 = OutFile(code_name='hipace',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_beam3D/newhi_beam3D155',field_name='raw',spec_name='trailer',use_num_list=True,out_num=500)
+        file1 = OutFile(code_name='hipace',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_beam3D/newhi_beam3D247rr',field_name='raw',spec_name='trailer',use_num_list=True,out_num=200)
         file1.open()
         file1.read_raw_q()
         file1.read_raw_p1()
@@ -1639,20 +1726,90 @@ if __name__ == '__main__':
         file1.read_raw_x3()
         file1.read_raw_p3()
         file1.read_raw_ene()
-        file1.select_raw_data(r_up=0.2)
+        file1.select_raw_data(r_up=1.2)
         ene_avg, ene_rms_spread = file1.raw_mean_rms_ene(if_select=True)
         emittance, twiss_parameters =file1.calculate_norm_rms_emittance_um(4.9e16, directions=(2,3), if_select=True)
-        h_fig, h_ax = file1.plot_raw_hist2D(dims='p1x1', num_bins = [1024,64], if_select=True, if_log_colorbar=True)
+        h_fig, h_ax = file1.plot_raw_hist2D(dims='p2x2', num_bins=[128,128], if_select=True, if_log_colorbar=False)
         h_ax2 = h_ax.twinx()
-        file1.data2D_slice_spread(weigh_threshold=5e1)
+        file1.data2D_slice_spread(weigh_threshold=1e2, relative_spread=True)
         file1.plot_data(h_fig, h_ax2, if_title=False, c='r')
+        plt.figure()
+        z, I = file1.raw_hist_current(n0_per_cc=5.03e15, num_bins=32)
+        plt.plot(z,I)
+        plt.xlabel('$k_p z$')
+        plt.ylabel('$I$ [A]')
+        print('t = {}'.format(file1.time))
         print('Q = {} pC'.format(file1.calculate_q_pC(4.9e16, if_select=True)))
         print('E = {} +- {} MeV'.format(ene_avg*0.511, ene_rms_spread*0.511))
         print('epsilon_x_norm = {} um, epsilon_y_norm = {} um'.format(emittance[0], emittance[1]))
         file1.close()
         plt.show()
+    def hi_beam3D():
+        h_fig, h_axs = plt.subplots(1, 2, figsize=[5., 2.5])
+        file1 = OutFile(code_name='hipace',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_beam3D/newhi_beam3D161',field_name='raw',spec_name='trailer',use_num_list=True,out_num=1735)
+        file1.open()
+        file1.read_raw_q()
+        file1.read_raw_p1()
+        file1.read_raw_x2()
+        file1.read_raw_p2()
+        file1.read_raw_x3()
+        file1.read_raw_p3()
+        file1.read_raw_ene()
+        file1.select_raw_data(p1_low=10.)
+        ene_avg, ene_rms_spread = file1.raw_mean_rms_ene(if_select=True)
+        emittance, twiss_parameters =file1.calculate_norm_rms_emittance_um(4.9e16, directions=(2,3), if_select=True)
+        file1.plot_raw_hist2D(h_fig, h_axs[0], dims='p1x1', num_bins=[256,128], if_select=True, if_colorbar=False, cmap=my_cmap.cmap_lower_range_transparent(original_cmap=plt.get_cmap('Reds')))
+        h_axs[0].set_xlabel('$k_p\zeta$')
+        h_axs[0].set_title(None)
+        h_axt = h_axs[0].twinx()
+        #file1.data2D_slice_spread(weigh_threshold=1e1)
+        #file1.plot_data(h_fig, h_ax2, if_title=False, c='r')
+        #plt.figure()
+        z, I = file1.raw_hist_current(n0_per_cc=4.9e16, num_bins=32, if_select=True)
+        h_axt.plot(z,I, c='b')
+        #plt.xlabel('$k_p z$')
+        #h_axt.set_ylabel('$I$ [A]')
+        h_axt.minorticks_on()
+        print('Time = {}'.format(file1.time))
+        print('Q = {} pC'.format(file1.calculate_q_pC(4.9e16, if_select=True)))
+        #print('E = {} +- {} MeV'.format(ene_avg*0.511, ene_rms_spread*0.511))
+        print('epsilon_x_norm = {} um, epsilon_y_norm = {} um'.format(emittance[0], emittance[1]))
+        file1.close()
+
+        file1 = OutFile(code_name='hipace',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_beam3D/newhi_beam3D259',field_name='raw',spec_name='trailer',use_num_list=True,out_num=20)
+        file1.open()
+        file1.read_raw_q()
+        file1.read_raw_p1()
+        file1.read_raw_x2()
+        file1.read_raw_p2()
+        file1.read_raw_x3()
+        file1.read_raw_p3()
+        file1.read_raw_ene()
+        file1.select_raw_data(p1_low=10.,r_up=0.4)
+        ene_avg, ene_rms_spread = file1.raw_mean_rms_ene(if_select=True)
+        emittance, twiss_parameters =file1.calculate_norm_rms_emittance_um(4.9e16, directions=(2,3), if_select=True)
+        file1.plot_raw_hist2D(h_fig, h_axs[1], dims='p1x1', num_bins=[256,128], if_select=True, if_colorbar=False, cmap=my_cmap.cmap_lower_range_transparent(original_cmap=plt.get_cmap('Reds')))
+        h_axs[1].set_xlabel('$k_p\zeta$')
+        h_axs[1].set_ylabel(None)
+        h_axs[1].set_title(None)
+        h_axt = h_axs[1].twinx()
+        #file1.data2D_slice_spread(weigh_threshold=1e1)
+        #file1.plot_data(h_fig, h_ax2, if_title=False, c='r')
+        #plt.figure()
+        z, I = file1.raw_hist_current(n0_per_cc=4.9e16, num_bins=32, if_select=True)
+        h_axt.plot(z,I, c='b')
+        #plt.xlabel('$k_p z$')
+        h_axt.set_ylabel('$I$ [A]')
+        h_axt.minorticks_on()
+        print('Time = {}'.format(file1.time))
+        print('Q = {} pC'.format(file1.calculate_q_pC(4.9e16, if_select=True)))
+        #print('E = {} +- {} MeV'.format(ene_avg*0.511, ene_rms_spread*0.511))
+        print('epsilon_x_norm = {} um, epsilon_y_norm = {} um'.format(emittance[0], emittance[1]))
+        file1.close()
+        plt.tight_layout()
+        plt.show()
     def beam_measure():
-        file1 = OutFile(code_name='osiris',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1/2020_4_6_ArII0.15preion/np1.4/y_0um',field_name='raw',spec_name='ramp',out_num=165)
+        file1 = OutFile(code_name='osiris',path='/home/zming/mnt/JSCRATCH/X1/scan_2020_6_10/tailoring7',field_name='raw',spec_name='driver',out_num=150)
         file1.open()
         file1.read_raw_q()
         file1.read_raw_p1()
@@ -1662,17 +1819,18 @@ if __name__ == '__main__':
         file1.read_raw_p3()
         file1.read_raw_ene()
         print('gamma_min = {}'.format(file1._raw_ene.min()+1.))
-        #file1.select_raw_data(r_up=.8)
+        print('gamma_max = {}'.format(file1._raw_ene.max()+1.))
+        #file1.select_raw_data(ene_up=2191.)
         ene_avg, ene_rms_spread = file1.raw_mean_rms_ene(if_select=True)
         emittance, twiss_parameters =file1.calculate_norm_rms_emittance_um(2.824e19, directions=(2,3), if_select=True)
         print('Q = {} pC'.format(file1.calculate_q_pC(2.824e19, if_select=True)))
         print('E = {} +- {} MeV'.format(ene_avg*0.511, ene_rms_spread*0.511))
         print('epsilon_x_norm = {} um, epsilon_y_norm = {} um'.format(emittance[0], emittance[1]))
         h_fig, h_ax = file1.plot_raw_hist2D(dims='p1x1', if_select=True, if_log_colorbar=True, if_colorbar=False)
-        h_ax2 = h_ax.twinx()
-        file1.data2D_slice_spread(weigh_threshold=1.e-2)
+        '''h_ax2 = h_ax.twinx()
+        file1.data2D_slice_spread(weigh_threshold=1.e-1)
         file1.plot_data(h_fig, h_ax2, if_title=False)
-        file1.plot_data(h_fig, h_ax2, c='r', if_title=False)
+        file1.plot_data(h_fig, h_ax2, c='r', if_title=False)'''
         file1.close()
         plt.show()
     def test_os():
@@ -1688,45 +1846,58 @@ if __name__ == '__main__':
         file1.close()
         plt.show()
     def test_hi():
-        file1 = OutFile(code_name='hipace',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_beam3D/hi_beam3D155',field_name='raw', spec_name='trailer', out_num=490)
+        file1 = OutFile(code_name='hipace',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_beam3D/newhi_beam3D183H_r',field_name='charge', spec_name='plasma',use_num_list=True,out_num=10)
         file1.open()
-        h_fig, h_ax = file1.plot_raw_hist2D(dims='p1x1', if_select=True, if_log_colorbar=True)
+        file1.read_data_slice()
+        file1.plot_data()
         file1.close()
-        #file1.data_center_of_mass2d(weigh_threshold=0.1)
-        #file1.plot_data(h_fig, h_ax)
-        file1.data2D_slice_spread(weigh_threshold=0.1)
-        ylim = h_ax.get_ylim()
-        h_ax2 = h_ax.twinx()
-        file1.plot_data(h_fig, h_ax2, if_title=False)
         plt.tight_layout()
         plt.show()
     def test_qp():
-        file1 = OutFile(code_name='quickpic',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/qp_hi_compare_intel16.0.3',field_name='charge',spec_name='Species0001',out_num=1)
-        h_fig = plt.figure(figsize=(8,4.5))
-        h_ax = h_fig.add_subplot(111)
-        h_ax.set_aspect('equal','box')
+        file1 = OutFile(code_name='quickpic',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/qp_hi_compare/qp1',field_name='charge',spec_name='Species0001', fld_slice=1 ,out_num=6050)
         file1.open()
-        file1.read_data_slice(dir = 2, pos=0.)
-        file1.plot_data(h_fig, h_ax, cmap='gray', if_colorbar=True)
+        '''file1.read_raw_q()
+        file1.read_raw_p1()
+        file1.read_raw_x2()
+        file1.read_raw_p2()
+        file1.read_raw_x3()
+        file1.read_raw_p3()
+        file1.read_raw_ene()
+        print('gamma_min = {}'.format(file1._raw_ene.min()+1.))
+        print('gamma_max = {}'.format(file1._raw_ene.max()+1.))
+        #file1.select_raw_data(ene_up=2191.)
+        ene_avg, ene_rms_spread = file1.raw_mean_rms_ene(if_select=True)
+        emittance, twiss_parameters =file1.calculate_norm_rms_emittance_um(5.03e15, directions=(2,3), if_select=True)
+        print('Q = {} pC'.format(file1.calculate_q_pC(5.03e15, if_select=True)))
+        print('E = {} +- {} MeV'.format(ene_avg*0.511, ene_rms_spread*0.511))
+        print('epsilon_x_norm = {} um, epsilon_y_norm = {} um'.format(emittance[0], emittance[1]))
+        h_fig, h_ax = file1.plot_raw_hist2D(dims='x1x3', if_select=True, if_log_colorbar=False, if_colorbar=False)'''
+        file1.read_data()
+        file1.plot_data(if_transpose=True)
         file1.close()
-        file1.spec_name='Beam0001'
-        file1.open()
-        file1.read_data_slice(dir = 2, pos=0.)
-        file1.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_higher_range_transparent(plt.cm.hot), if_colorbar=True)
+        plt.show()
+    def test_profile():
+        dir=2
+        file1 = OutFile()
+        file1.open(filename='/home/zming/PyHome/scripts_X1/Profile_plotter/myprofile.h5')
+        file1.read_data_slice(dir=dir)
+        file1.plot_data(vmin=0.5, vmax=1.5)
         file1.close()
-        file1.field_name='e1'
+        file1 = OutFile(path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_prof_file_test',field_name='charge',spec_name='e',out_num=7)
         file1.open()
-        file1.read_data_lineout(dir=0, pos=(0.,0.))
-        file1.plot_data(h_fig, h_ax, c='r', ls='-', multiple=10.)
+        file1.read_data_slice(dir=dir)
+        file1._data=np.abs(file1._data)
+        file1.plot_data(vmin=0.5, vmax=1.5)
         file1.close()
         plt.show()
 
-    #test_qp()
+    test_qp()
     #test_os()
     #test_hi()
     #beam_measure()
     #beam_measure_hi()
-    beam_measure_beam3D()
+    #hi_beam3D()
+    #beam_measure_beam3D()
     #tracking()
     #select_tag()
     #tmp_hipace3D()
@@ -1734,3 +1905,4 @@ if __name__ == '__main__':
     #tmp_3D()
     #X1plot()
     #oblique_laser_3D()
+    #test_profile()
