@@ -307,24 +307,26 @@ class OutFile:
     time = property(get_time, set_time)
 
 ################################method open################################
-    def open(self, filename=None, t_offset = None):
+    def open(self, filename=None, t_offset = None, cell_size_qp_raw = None):
         '''
             The normal use is to let the code determin file name according to the PIC code's file name regulation. In some cases one may need to set file name manually, so one may provide filename in the argument.
         filename: None or string.
                   The path to an output h5 file. If None, automatically set the path.
         t_offset: None or float.
                   If not None, self._time will have an offset respect to the time read from attribute 'TIME' of the h5 file.
+        cell_size_qp_raw: None or a array of 3 elements.
+                  The cell size, if the code is QuickPIC and the file type is RAW. Currently QuickPIC RAW output does not have attributes for the cell sizes.
         '''
         if self._out_type not in self._accepted_out_type: raise NotImplementedError('Out type {} not implemented!'.format(self._out_type))
         if filename is None: filename=self.path_filename
         if not os.path.isfile(filename): raise FileNotFoundError('File {} not found!'.format(filename))
         self.fileid = h5py.File(filename,'r')
         # Do not obtain the grid information if the type is TRACKS
-        if self._out_type in ['TRACKS']: pass
+        if self._out_type == 'TRACKS': pass
         else:
         # Obtain the grid information
 ##value _num_dimensions##
-            try:
+            if self._out_type != 'RAW':
                 #try to read the dimension from 'AXIS'
                 #for the code osiris, when plotting phasespace, the data matrix size may be different from the attribute NX
                 self._num_dimensions = len(self.fileid['AXIS'].keys())
@@ -341,17 +343,19 @@ class OutFile:
                     self.fileid['AXIS/AXIS{0}'.format(i+1)].read_direct(self._axis_range, np.s_[:], np.s_[:,i])
                     self._axis_labels.append('${}$'.format(self.fileid['AXIS/AXIS{0}'.format(i+1)].attrs.get('NAME')[0].decode("utf-8")))
                     self._axis_units.append('${}$'.format(self.fileid['AXIS/AXIS{0}'.format(i+1)].attrs.get('UNITS')[0].decode("utf-8")))
-            except KeyError:
-                #when 'AXIS' does not exist, eg. output from HiPACE or RAW in osiris, read from the attribute
-                xmax = self.fileid.attrs.get('XMAX')
-                xmin = self.fileid.attrs.get('XMIN')
-                nx = self.fileid.attrs.get('NX')
-                self._num_dimensions = len(xmax)
+            else:
+                if self.code_name != 'quickpic':
+                    # For RAW data, 'AXIS' does not exist. Read simulation box information from the attribute
+                    xmax = self.fileid.attrs.get('XMAX')
+                    xmin = self.fileid.attrs.get('XMIN')
+                    nx = self.fileid.attrs.get('NX')
+                    self._num_dimensions = len(xmax)
 ##value _axis_range##
-                self._axis_range = np.zeros((2,self._num_dimensions), dtype=float_type)
-                for i in range(self._num_dimensions):
-                    self._axis_range[0,i] = xmin[i]
-                    self._axis_range[1,i] = xmax[i]
+                    self._axis_range = np.zeros((2,self._num_dimensions), dtype=float_type)
+                    for i in range(self._num_dimensions):
+                        self._axis_range[0,i] = xmin[i]
+                        self._axis_range[1,i] = xmax[i]
+                else: self._num_dimensions = 3
             for i in self.fileid.keys():
                 if i!='AXIS':
                     break
@@ -363,12 +367,8 @@ class OutFile:
                 #if nx not defined, get nx from the size of the matrix. In case of code osiris, the data matrix size may be different from the attribute when plotting phasespace.
                 nx = np.flip(self.fileid[self._data_name_in_file].shape)
 ##value _cell_size##
-            #if 'osiris' == self.code_name:
-            #In osiris, the data 3 dimensions correspond to dir = 2, 1, 0, respectively.
-            #In hipace, the data 3 dimensions correspond to dir = 0, 1, 2, respectively.
-            #    self._cell_size = (self._axis_range[1, :] - self._axis_range[0, :]) / np.flipud(self.fileid[self._data_name_in_file].shape)
-            #elif 'hipace' == self.code_name:
-            self._cell_size = (self._axis_range[1, :] - self._axis_range[0, :]) / nx
+            if self.code_name == 'quickpic' and self._out_type == 'RAW': self._cell_size = cell_size_qp_raw
+            else: self._cell_size = (self._axis_range[1, :] - self._axis_range[0, :]) / nx
             self._time = self.fileid.attrs['TIME'][0]
             if t_offset is not None: self._time += t_offset
 
@@ -391,38 +391,38 @@ class OutFile:
 
 ################################method read_raw_x1################################
     def read_raw_x1(self):
-        self._raw_x1 = np.zeros(self.fileid['x1'].shape, dtype=float_type)
-        self.fileid['x1'].read_direct(self._raw_x1)
+        if self.code_name == 'quickpic': self._raw_x1 = self.fileid['x3'][()]
+        else: self._raw_x1 = self.fileid['x1'][()]
         return self._raw_x1
 
 ################################method read_raw_x2################################
     def read_raw_x2(self):
-        self._raw_x2 = np.zeros(self.fileid['x2'].shape, dtype=float_type)
-        self.fileid['x2'].read_direct(self._raw_x2)
+        if self.code_name == 'quickpic': self._raw_x2 = self.fileid['x1'][()]
+        else: self._raw_x2 = self.fileid['x2'][()]
         return self._raw_x2
 
 ################################method read_raw_x3################################
     def read_raw_x3(self):
-        self._raw_x3 = np.zeros(self.fileid['x3'].shape, dtype=float_type)
-        self.fileid['x3'].read_direct(self._raw_x3)
+        if self.code_name == 'quickpic': self._raw_x3 = self.fileid['x2'][()]
+        else: self._raw_x3 = self.fileid['x3'][()]
         return self._raw_x3
 
 ################################method read_raw_p1################################
     def read_raw_p1(self):
-        self._raw_p1 = np.zeros(self.fileid['p1'].shape, dtype=float_type)
-        self.fileid['p1'].read_direct(self._raw_p1)
+        if self.code_name == 'quickpic': self._raw_p1 = self.fileid['p3'][()]
+        else: self._raw_p1 = self.fileid['p1'][()]
         return self._raw_p1
 
 ################################method read_raw_p2################################
     def read_raw_p2(self):
-        self._raw_p2 = np.zeros(self.fileid['p2'].shape, dtype=float_type)
-        self.fileid['p2'].read_direct(self._raw_p2)
+        if self.code_name == 'quickpic': self._raw_p2 = self.fileid['p1'][()]
+        else: self._raw_p2 = self.fileid['p2'][()]
         return self._raw_p2
 
 ################################method read_raw_p3################################
     def read_raw_p3(self):
-        self._raw_p3 = np.zeros(self.fileid['p3'].shape, dtype=float_type)
-        self.fileid['p3'].read_direct(self._raw_p3)
+        if self.code_name == 'quickpic': self._raw_p3 = self.fileid['p2'][()]
+        else: self._raw_p3 = self.fileid['p3'][()]
         return self._raw_p3
 
 ################################method read_raw_ene################################
@@ -434,7 +434,7 @@ class OutFile:
             if ene_key_warning:
             #by default, if 'ene' key does not exist, print the following warning message.
             #but one can explicitly silence this message by setting ene_key_warning=False
-                print('Warning! Key \'ene\' does not exist in particle raw data! Reading p1, p2, p3 and doing ene=sqrt(p1^2+p2^2+p3^2)-1 instead. Please make sure p1, p2, p3 are read before this!')
+                warnings.warn('Warning! Key \'ene\' does not exist in particle raw data! Reading p1, p2, p3 and doing ene=sqrt(p1^2+p2^2+p3^2)-1 instead. Please make sure p1, p2, p3 are read before this!')
             self._raw_ene = np.sqrt(np.square(self._raw_p1)+np.square(self._raw_p2)+np.square(self._raw_p3))-1.
         return self._raw_ene
 
@@ -541,7 +541,7 @@ class OutFile:
                     print("Warning: no particle is selected! Charge is set to 0.")
                     return 0.0
                 q_array = q_array[self._raw_select_index]
-            except: print("Warning: particle select condition is not valid! All particles are used.")
+            except: warnings.warn('Particle select condition is not valid! All particles are used.')
         #normalized cell volume
         cell_volume_norm = 1.0
         for i in range(self.num_dimensions):
@@ -582,7 +582,7 @@ class OutFile:
                     return emittances, [alphas, betas, gammas]
                 weights = weights[self._raw_select_index]
                 p1_array = p1_array[self._raw_select_index]
-            except: print("Warning: particle select condition is not valid! All particles are used.")
+            except: warnings.warn('Particle select condition is not valid! All particles are used.')
         sum_weight=np.sum(weights)
         mean_p1=np.sum(np.multiply(p1_array, weights))/sum_weight
         for i in range(len(directions)):
@@ -599,7 +599,10 @@ class OutFile:
                 try:
                     x = x[self._raw_select_index]
                     p = p[self._raw_select_index]
-                except: print("Warning: particle select condition is not valid! All particles are used.")
+                except: warnings.warn('Particle select condition is not valid! All particles are used.')
+            # Centering
+            x = x - np.average(x)
+            p = p - np.average(x)
             # The geometric emittance calculation refer to
             # http://nicadd.niu.edu/~syphers/uspas/2018w/some-notes-on-ellipses.html
             # unnormalize x to mm
@@ -636,7 +639,7 @@ class OutFile:
                     print("Warning: no particle is selected! Return without saving a tag file.")
                     return 1
                 tag_array = self._raw_tag[self._raw_select_index]
-            except: print("Warning: particle select condition is not valid! All particles are used.")
+            except: warnings.warn('Particle select condition is not valid! All particles are used.')
         else: tag_array = self._raw_tag
         with open("{}/{}".format(path, tag_file_name),'w',encoding = 'utf-8') as h_file:
         #h_file.close() is guaranteed
@@ -667,7 +670,9 @@ class OutFile:
             Getting dir_in_AXIS and dir_in_data according to dir.
             OSIRIS 3D h5 file has data axes [y,x,z] and AXIS group [z,x,y].
             OSIRIS 2D h5 file has data axes [x,z] and AXIS group [z,x].
-            QuickPIC h5 file has data axes [z,y,x] and AXIS group [x,y,z].
+            QuickPIC 3D h5 file has data axes [z,y,x] and AXIS group [x,y,z].
+            QuickPIC 2D h5 file has: x-z slices data axes [z,x] and AXIS group [x,z];
+                                     y-z slices data axes [z,y] and AXIS group [y,z].
             HiPACE h5 file has data axes [z,x,y] and AXIS group [z,x,y].
         '''
         if self.code_name in {'osiris'}:
@@ -676,9 +681,13 @@ class OutFile:
             dir_in_data = self.num_dimensions-1-dir
         elif self.code_name in {'quickpic'}:
             # QuickPIC h5 file has data axes [z,y,x] and AXIS group [x,y,z].
-            dir_in_AXIS = (dir+2)%3
-            qp_data_axes = np.array((0,2,1))
-            dir_in_data = qp_data_axes[dir]
+            if self.num_dimensions ==3:
+                dir_in_AXIS = (dir+2)%3
+                qp_data_axes = np.array((0,2,1))
+                dir_in_data = qp_data_axes[dir]
+            else: # 2 dimensional data
+                dir_in_AXIS = 1-dir
+                dir_in_data = dir
         elif self.code_name in {'hipace'}:
             # HiPACE h5 file has data axes [z,x,y] and AXIS group [z,x,y].
             dir_in_AXIS = dir
@@ -1060,14 +1069,17 @@ class OutFile:
         return h_fig, h_ax
 
 ################################method pcolor_data_2d################################
-    def pcolor_data_2d(self, h_fig=None, h_ax=None, if_colorbar=True, colorbar_orientation='vertical', if_log_colorbar=False, vmin=None, vmax=None, cmap=plt.cm.jet, alpha=None, if_z2zeta=False, if_transpose=False, **kwargs):
+    def pcolor_data_2d(self, h_fig=None, h_ax=None, if_colorbar=True, colorbar_orientation='vertical', if_log_colorbar=False, vmin=None, vmax=None, cmap=plt.cm.jet, alpha=None, if_z2zeta=False, if_transpose=None, **kwargs):
         '''Plot 2D data in as pcolor
         if_z2zeta: boolean
                    If True, offset x axis by -t (thus it is effectively zeta=z-t)
-        if_transpose: boolean
-                   If True, transpose the plot (which is useful for QuickPIC)'''
+        if_transpose: boolean or None
+                   If None, transpose the plot for QuickPIC by default, and do not transpose for OSIRIS and HiPACE'''
         if self._data.ndim!=2:
             raise RuntimeError('Data is not two dimensional! The OutFile.pcolor_data_2d() method cannot proceed.')
+        if if_transpose is None:
+            if self.code_name == 'quickpic' and self.out_type != 'RAW': if_transpose = True
+            else: if_transpose = False
         if if_transpose:
             self._data = np.transpose(self._data)
             self._axis_slices = np.flip(self._axis_slices)
@@ -1148,7 +1160,7 @@ class OutFile:
             try:
                 weights = weights[self._raw_select_index]
                 gamma = gamma[self._raw_select_index]
-            except: print("Warning: particle select condition is not valid! All particles are used.")
+            except: warnings.warn('Particle select condition is not valid! All particles are used.')
         if range_max is None:
             range_max = gamma.max()
         if range_min is None:
@@ -1174,7 +1186,7 @@ class OutFile:
             try:
                 q = q[self._raw_select_index]
                 z = z[self._raw_select_index]
-            except: print("Warning: particle select condition is not valid! All particles are used.")
+            except: warnings.warn('Particle select condition is not valid! All particles are used.')
         if range_max is None:
             range_max = z.max()
         if range_min is None:
@@ -1277,7 +1289,7 @@ class OutFile:
                 weights = weights[self._raw_select_index]
                 x_array = x_array[self._raw_select_index]
                 y_array = y_array[self._raw_select_index]
-            except: print("Warning: particle select condition is not valid! All particles are used.")
+            except: warnings.warn('Particle select condition is not valid! All particles are used.')
         self._data, yedges, xedges = np.histogram2d(y_array, x_array, bins=num_bins, range=range, weights=weights)
         #self._data=np.transpose(self._data)
         self._axis_slices = [slice(xedges[0], xedges[-1], xedges[1]-xedges[0]), slice(yedges[0], yedges[-1], yedges[1]-yedges[0])]
@@ -1305,7 +1317,7 @@ class OutFile:
             try:
                 weights = weights[self._raw_select_index]
                 ene = ene[self._raw_select_index]
-            except: print("Warning: particle select condition is not valid! All particles are used.")
+            except: warnings.warn('Particle select condition is not valid! All particles are used.')
         ene_avg, sum_weights = np.average(ene, weights=weights, returned=True)
         ene_rms_spread = np.sqrt(np.sum(np.square(ene-ene_avg)*weights)/sum_weights)
         return ene_avg, ene_rms_spread
@@ -1688,7 +1700,7 @@ if __name__ == '__main__':
         plt.tight_layout()
         plt.show()
     def beam_measure_beam3D():
-        file1 = OutFile(code_name='osiris',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_beam3D/os_beam3D247',field_name='raw',spec_name='He_e',use_num_list=True,out_num=35)
+        file1 = OutFile(code_name='osiris',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_beam3D/os_beam3D262',field_name='raw',spec_name='He_e',use_num_list=True,out_num=50)
         file1.open()
         file1.read_raw_q()
         file1.read_raw_p1()
@@ -1776,7 +1788,7 @@ if __name__ == '__main__':
         print('epsilon_x_norm = {} um, epsilon_y_norm = {} um'.format(emittance[0], emittance[1]))
         file1.close()
 
-        file1 = OutFile(code_name='hipace',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_beam3D/newhi_beam3D259',field_name='raw',spec_name='trailer',use_num_list=True,out_num=20)
+        file1 = OutFile(code_name='hipace',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_beam3D/newhi_beam3D259',field_name='raw',spec_name='trailer',use_num_list=True,out_num=120)
         file1.open()
         file1.read_raw_q()
         file1.read_raw_p1()
@@ -1834,29 +1846,10 @@ if __name__ == '__main__':
         file1.close()
         plt.show()
     def test_os():
-        file1 = OutFile(code_name='osiris',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_oblique_laser_test3D',field_name='e3',out_num=4)
-        h_fig = plt.figure()
-        h_ax = h_fig.add_subplot(111)
-        h_ax.set_aspect('equal','box')
-        file1.open()
-        file1.read_data_slice(dir = 2)
-        file1.plot_data(h_fig, h_ax)
-        file1.read_data_lineout(dir=0)
-        file1.plot_data(h_fig, h_ax, c='r', ls='-', multiple=1e-1)
-        file1.close()
-        plt.show()
-    def test_hi():
-        file1 = OutFile(code_name='hipace',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_beam3D/newhi_beam3D183H_r',field_name='charge', spec_name='plasma',use_num_list=True,out_num=10)
-        file1.open()
-        file1.read_data_slice()
-        file1.plot_data()
-        file1.close()
-        plt.tight_layout()
-        plt.show()
-    def test_qp():
-        file1 = OutFile(code_name='quickpic',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/qp_hi_compare/qp1',field_name='charge',spec_name='Species0001', fld_slice=1 ,out_num=6050)
-        file1.open()
-        '''file1.read_raw_q()
+        file1 = OutFile(code_name='osiris',path='',field_name='raw',out_num=0)
+        file1.open(filename='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_qp_compare/hi3/trailer.h5')
+        print(file1._cell_size)
+        file1.read_raw_q()
         file1.read_raw_p1()
         file1.read_raw_x2()
         file1.read_raw_p2()
@@ -1871,11 +1864,50 @@ if __name__ == '__main__':
         print('Q = {} pC'.format(file1.calculate_q_pC(5.03e15, if_select=True)))
         print('E = {} +- {} MeV'.format(ene_avg*0.511, ene_rms_spread*0.511))
         print('epsilon_x_norm = {} um, epsilon_y_norm = {} um'.format(emittance[0], emittance[1]))
-        h_fig, h_ax = file1.plot_raw_hist2D(dims='x1x3', if_select=True, if_log_colorbar=False, if_colorbar=False)'''
-        file1.read_data()
-        file1.plot_data(if_transpose=True)
+        h_fig, h_ax = file1.plot_raw_hist2D(dims='p1x1', if_select=True, if_log_colorbar=True, if_colorbar=True,range=[[19569.4, 19569.6], [5.,11.]])
         file1.close()
-        plt.show()
+    def test_hi():
+        file1 = OutFile(code_name='hipace',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_qp_compare/hi3',field_name='raw',spec_name='trailer', use_num_list=True, out_num=584)
+        file1.open()
+        print(file1._cell_size)
+        file1.read_raw_q()
+        file1.read_raw_p1()
+        file1.read_raw_x2()
+        file1.read_raw_p2()
+        file1.read_raw_x3()
+        file1.read_raw_p3()
+        file1.read_raw_ene()
+        print('gamma_min = {}'.format(file1._raw_ene.min()+1.))
+        print('gamma_max = {}'.format(file1._raw_ene.max()+1.))
+        #file1.select_raw_data(ene_up=2191.)
+        ene_avg, ene_rms_spread = file1.raw_mean_rms_ene(if_select=True)
+        emittance, twiss_parameters =file1.calculate_norm_rms_emittance_um(5.03e15, directions=(2,3), if_select=True)
+        print('Q = {} pC'.format(file1.calculate_q_pC(5.03e15, if_select=True)))
+        print('E = {} +- {} MeV'.format(ene_avg*0.511, ene_rms_spread*0.511))
+        print('epsilon_x_norm = {} um, epsilon_y_norm = {} um'.format(emittance[0], emittance[1]))
+        h_fig, h_ax = file1.plot_raw_hist2D(dims='p1x1', if_select=True, if_log_colorbar=True, if_colorbar=True, vmin=.05, vmax=3.e2)
+        file1.close()
+    def test_qp():
+        file1 = OutFile(code_name='quickpic',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/qp_hi_compare/qp1',field_name='raw',spec_name='Beam0003', out_num=6900)
+        file1.open(cell_size_qp_raw = np.array([0.046875, 0.046875, 0.025390625]))
+        print(file1._cell_size)
+        file1.read_raw_q()
+        file1.read_raw_p1()
+        file1.read_raw_x2()
+        file1.read_raw_p2()
+        file1.read_raw_x3()
+        file1.read_raw_p3()
+        file1.read_raw_ene()
+        print('gamma_min = {}'.format(file1._raw_ene.min()+1.))
+        print('gamma_max = {}'.format(file1._raw_ene.max()+1.))
+        #file1.select_raw_data(ene_up=2191.)
+        ene_avg, ene_rms_spread = file1.raw_mean_rms_ene(if_select=True)
+        emittance, twiss_parameters =file1.calculate_norm_rms_emittance_um(5.03e15, directions=(2,3), if_select=True)
+        print('Q = {} pC'.format(file1.calculate_q_pC(5.03e15, if_select=True)))
+        print('E = {} +- {} MeV'.format(ene_avg*0.511, ene_rms_spread*0.511))
+        print('epsilon_x_norm = {} um, epsilon_y_norm = {} um'.format(emittance[0], emittance[1]))
+        h_fig, h_ax = file1.plot_raw_hist2D(dims='p1x1', if_select=True, if_log_colorbar=True, if_colorbar=True)
+        file1.close()
     def test_profile():
         dir=2
         file1 = OutFile()
@@ -1891,9 +1923,10 @@ if __name__ == '__main__':
         file1.close()
         plt.show()
 
+    test_os()
+    test_hi()
     test_qp()
-    #test_os()
-    #test_hi()
+    plt.show()
     #beam_measure()
     #beam_measure_hi()
     #hi_beam3D()

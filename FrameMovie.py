@@ -19,8 +19,12 @@ class Frames:
             else: raise NotImplementedError('code_name {} not implemented.'.format(code_name))
             if plot_type not in {'laser_driven', 'beam_driven'}: frame_surf = '{}_{}'.format(plot_spec_name, plot_type)
             elif dir==0: frame_surf = 'slice_x-y'
-            elif dir==1: frame_surf = 'slice_y-z'
-            elif dir==2: frame_surf = 'slice_x-z'
+            elif dir==1:
+                if code_name == 'quickpic': frame_surf = 'slice_x-z'
+                else: frame_surf = 'slice_y-z'
+            elif dir==2:
+                if code_name == 'quickpic': frame_surf = 'slice_y-z'
+                else: frame_surf = 'slice_x-z'
             else: raise ValueError('dir should be 1, 2 or 3.')
             frame_folder = frame_pref+'/'+frame_surf
         self.frame_path = simulation_path+'/'+frame_folder
@@ -55,8 +59,12 @@ class Frames:
         self.max_missing_file = max_missing_file
         self.plot_range = plot_range
         # Initialize outfile object, especially initialize avail_num_list if use_num_list.
-        if ('beam_driven' == self.plot_type) or ('laser_driven' == self.plot_type):
-            self.outfile = outfile.OutFile(code_name = code_name, path=simulation_path, field_name='charge', average=average, spec_name=background_spec_name, use_num_list = use_num_list, out_num=start_num)
+        if self.plot_type in {'beam_driven', 'laser_driven'}:
+            try:
+                self.outfile = outfile.OutFile(code_name = code_name, path=simulation_path, field_name='charge', average=average, spec_name=background_spec_name, use_num_list = use_num_list, out_num=start_num)
+            except RuntimeError:
+                # For QuickPIC, fields may saved as slices
+                self.outfile = outfile.OutFile(code_name = code_name, path=simulation_path, field_name='charge', average=average, spec_name=background_spec_name, use_num_list = use_num_list, out_num=start_num, fld_slice=dir)
         else:
             self.outfile = outfile.OutFile(code_name = code_name, path=simulation_path, field_name='raw', spec_name=plot_spec_name, use_num_list = use_num_list, out_num=start_num)
 
@@ -154,14 +162,16 @@ class Frames:
         h_ax = h_fig.add_subplot(111)
         h_ax.set_aspect('equal','box')
         self.outfile.open()
-        self.outfile.read_data_slice(dir=self.dir)
+        if self.outfile.num_dimensions>=3: self.outfile.read_data_slice(dir=self.dir)
+        else: self.outfile.read_data()
         self.outfile.plot_data(h_fig, h_ax, vmin=self.background_vmin, vmax=self.background_vmax, cmap='gray')
         self.outfile._color_bar.set_label('$\\rho_e$')
         self.outfile.close()
 
         self.outfile.spec_name=self.driver_spec_name
         self.outfile.open()
-        self.outfile.read_data_slice(dir=self.dir)
+        if self.outfile.num_dimensions>=3: self.outfile.read_data_slice(dir=self.dir)
+        else: self.outfile.read_data()
         self.outfile.plot_data(h_fig, h_ax, vmin=self.driver_vmin, vmax=self.driver_vmax, cmap=my_cmap.cmap_higher_range_transparent(plt.cm.hot))
         self.outfile._color_bar.set_label('$\\rho_d$')
         if self.if_driver_cm:
@@ -175,7 +185,8 @@ class Frames:
         if self.trail_spec_name is not None:
             self.outfile.spec_name=self.trail_spec_name
             self.outfile.open()
-            self.outfile.read_data_slice(dir=self.dir)
+            if self.outfile.num_dimensions>=3: self.outfile.read_data_slice(dir=self.dir)
+            else: self.outfile.read_data()
             self.outfile.plot_data(h_fig, h_ax, vmin=self.trail_vmin, vmax=self.trail_vmax, cmap=my_cmap.cmap_higher_range_transparent())
             self.outfile._color_bar.set_label('$\\rho_t$')
             if self.if_trail_cm:
@@ -230,7 +241,8 @@ class Frames:
         #h_ax.set_aspect('equal', 'box')
         #plt.ylim(-10,10)
         self.outfile.open()
-        self.outfile.read_data_slice(dir=self.dir)
+        if self.outfile.num_dimensions>=3: self.outfile.read_data_slice(dir=self.dir)
+        else: self.outfile.read_data()
         self.outfile.plot_data(h_fig, h_ax, cmap='gray', vmax=self.background_vmax, vmin=self.background_vmin)
         self.outfile._color_bar.set_label('$\\rho_e$')
         self.outfile.close()
@@ -238,14 +250,16 @@ class Frames:
         if self.trail_spec_name is not None:
             self.outfile.spec_name=self.trail_spec_name
             self.outfile.open()
-            self.outfile.read_data_slice(dir=self.dir)
+            if self.outfile.num_dimensions>=3: self.outfile.read_data_slice(dir=self.dir)
+            else: self.outfile.read_data()
             self.outfile.plot_data(h_fig, h_ax, vmin=self.trail_vmin, vmax=self.trail_vmax, cmap=my_cmap.cmap_higher_range_transparent())
             self.outfile._color_bar.set_label('$\\rho_t$')
             self.outfile.close()
 
         self.outfile.field_name='e3'
         self.outfile.open()
-        self.outfile.read_data_slice(dir=self.dir)
+        if self.outfile.num_dimensions>=3: self.outfile.read_data_slice(dir=self.dir)
+        else: self.outfile.read_data()
         if if_laser_profile:
             self.outfile.data_profile2d()
             self.outfile.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_lower_range_transparent(plt.cm.Reds, transparency_transition_region=[0.15,0.4]))
@@ -328,10 +342,13 @@ class Frames:
 #        subprocess.call('mencoder \'{0}/*.png\' -mf type=png:fps=10 -ovc lavc -lavcopts vcodec=wmv2 -oac copy -o {0}/movie.mpg'.format(self.frame_path), shell=True)
 
 if __name__ == '__main__':
-    #frame1 = Frames(simulation_path = '/home/zming/mnt/JSCRATCH/os_beam3D/os_beam3D227', plot_type = 'beam_driven', start_num = 13, stride_num=1, count_num=99999, background_spec_name='e', background_vmin=-5, driver_spec_name='driver', driver_vmin=-10, trail_spec_name='He_e', trail_vmax=0., trail_vmin=-20., if_e1=True, if_psi=True, dir=2)
-    #frame1 = Frames(simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_beam3D/os_beam3D259', plot_type = 'beam_driven', start_num = 0, stride_num=1, count_num=99999, background_spec_name='e', background_vmin=-5, driver_spec_name='driver', driver_vmin=-10, trail_spec_name='He_e', trail_vmax=0., trail_vmin=-20., if_e1=True, if_psi=True, dir=1)
-    #frame1 = Frames(code_name = 'hipace', simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_qp_compare/hi3', plot_type = 'beam_driven', use_num_list = True, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-5, driver_spec_name='driver', driver_vmin=-50, if_e1=True, if_psi=True, trail_spec_name='trailer', trail_vmax=0, trail_vmin=-30, dir=2)
-    frame1 = Frames(code_name = 'hipace', simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_beam3D/newhi_beam3D259', plot_type = 'beam_driven', use_num_list = True, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-5, driver_spec_name='driver', driver_vmin=-50, if_e1=True, if_psi=True, trail_spec_name='trailer', trail_vmax=0, trail_vmin=-30, dir=2)
+    #frame1 = Frames(simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_beam3D/os_beam3D263', plot_type = 'beam_driven', start_num = 0, stride_num=1, count_num=99999, background_spec_name='e', background_vmin=-5, driver_spec_name='driver', driver_vmin=-10, trail_spec_name='He_e', trail_vmax=0., trail_vmin=-20., if_e1=True, if_psi=True, dir=1)
+    #frame1 = Frames(simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_beam3D/os_beam3D263', plot_type = 'p2x2', plot_spec_name='He_e', use_num_list = True, start_num = 29, stride_num=1, count_num=999999)
+    frame1 = Frames(code_name = 'hipace', simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_qp_compare/hi4', plot_type = 'beam_driven', use_num_list = True, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-5, driver_spec_name='driver', driver_vmin=-20, if_e1=True, if_psi=True, dir=2)
+    #frame1 = Frames(code_name = 'hipace', simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_qp_compare/hi3', plot_type = 'p1x1', plot_spec_name='driver', use_num_list = True, start_num = 0, stride_num=1, count_num=99999)
+    #frame1 = Frames(code_name = 'quickpic', simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/qp_hi_compare/qp4', plot_type = 'beam_driven', use_num_list = True, start_num = 0, stride_num=1, count_num=99999, background_spec_name='Species0001', background_vmin=-5, driver_spec_name='Beam0001', driver_vmin=-20, if_e1=True, if_psi=True, dir=1)
+    #frame1 = Frames(code_name = 'quickpic', simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/qp_hi_compare/qp4', plot_type = 'p1x1', plot_spec_name='Beam0001', use_num_list = True, start_num = 0, stride_num=1, count_num=99999)
+    #frame1 = Frames(code_name = 'hipace', simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_beam3D/newhi_beam3D259', plot_type = 'beam_driven', use_num_list = True, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-5, driver_spec_name='driver', driver_vmin=-50, if_e1=True, if_psi=True, trail_spec_name='trailer', trail_vmax=0, trail_vmin=-30, dir=1)
     #frame1 = Frames(code_name = 'hipace', simulation_path = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_beam3D/newhi_beam3D259', plot_type = 'p2x2', plot_spec_name='trailer', use_num_list = True, start_num = 0, stride_num=1, count_num=999999, plot_range=[[-5.,5.],[-0.5,0.5]])
     #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/simulations/os2D/os_DRI3D19', plot_type = 0, start_num = 0, stride_num=1, count_num=99999, background_spec_name='plasma', background_vmin=-10, driver_spec_name='beam-driver', driver_vmin=-5, if_e1=True, if_psi=False, dir=1)
     #frame1 = Frames(code_name = 'osiris', simulation_path = '/home/zming/mnt/JSCRATCH/X1/scan_2020_6_10/tailoring7', plot_type = 'beam_driven', start_num = 0, count_num=99999, background_spec_name='plasma', background_vmin=-1.e-3, driver_spec_name='driver', driver_vmin=-1.e-2, trail_spec_name='ramp', trail_vmax=0., trail_vmin=-1.e-3, if_e1=True, if_psi=True, dir=2)

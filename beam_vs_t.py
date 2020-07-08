@@ -42,7 +42,7 @@ def get_beam_parameters(outfile_object, n0_per_cc, gamma_threshold, gamma_spread
     else: raise NotImplementedError("Method of {} for gamma spread of the beam has not been implemented yet!".format(gamma_spread_method))
     return outfile_object.time, q_pC, emittances, gamma, gamma_spread, Courant_Snyder_parameters
 
-def plot_beam_parameters_vs_t(path, species_name, n0_per_cc, code_name='osiris', gamma_threshold=1., use_num_list=False, start=0, count=0, stride=1, t_offset = 0., max_missing_file=0, gamma_spread_method="lfit", h_f=None, charge_abs=False, linestyle='-', label = None):
+def plot_beam_parameters_vs_t(path, species_name, n0_per_cc, code_name='osiris', gamma_threshold=1., use_num_list=False, start=0, count=0, stride=1, t_offset = 0., max_missing_file=0, gamma_spread_method="lfit", h_f=None, charge_abs=False, linestyle='-', label = None, cell_size_qp_raw = None):
     '''
     max_missing_file is the maximum continue files missing allowed. HiPACE sometimes fails in dumping output files.
     '''
@@ -67,7 +67,7 @@ def plot_beam_parameters_vs_t(path, species_name, n0_per_cc, code_name='osiris',
             break
         print('File number {}'.format(outfile_object.actual_num))
         try:
-            outfile_object.open()
+            outfile_object.open(cell_size_qp_raw = cell_size_qp_raw)
             #set missing_file = 0 if success
             missing_file = 0
         except IOError as err:
@@ -173,7 +173,8 @@ if __name__ == '__main__':
     #plot_beam_parameters_vs_t(code_name='osiris', path='/home/zming/mnt/JSCRATCH/os_beam3D/os_beam3D155', species_name='He_e', n0_per_cc=4.9e16, gamma_threshold=1., h_f=h_f, start=14, count=999, stride=1, linestyle='--', charge_abs=True)
     #plot_beam_parameters_vs_t(code_name='hipace', path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_beam3D155', species_name='trailer', n0_per_cc=4.9e16, gamma_threshold=1., h_f=h_f, start=0, count=999, stride=10, t_offset=152., linestyle='-')
     #plot_beam_parameters_vs_t(code_name='hipace', path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1/scan_2020_1_29_driver_profile_scan/density0.6/zc1_1_hi0.1den_renorm', species_name='driver', n0_per_cc=1.0e16, gamma_threshold=1., start=0, count=999, stride=25, linestyle='--', h_f=h_f)
-    plot_beam_parameters_vs_t(code_name='hipace', path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_beam3D/newhi_beam3D259', species_name='trailer', n0_per_cc=4.9e16, gamma_threshold=1., use_num_list=True, start=0, count=1302, stride=1, linestyle='-', h_f=h_f)
+    #plot_beam_parameters_vs_t(code_name='hipace', path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_beam3D/newhi_beam3D259', species_name='trailer', n0_per_cc=4.9e16, gamma_threshold=1., use_num_list=True, start=0, count=120, stride=1, linestyle='-', h_f=h_f)
     #plot_beam_parameters_vs_t(code_name='hipace', path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_qp_compare/hi3', species_name='trailer', n0_per_cc=5.03e15, gamma_threshold=1., use_num_list=True, start=0, count=999, stride=1, linestyle='-', h_f=h_f)
+    plot_beam_parameters_vs_t(code_name='quickpic', path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/qp_hi_compare/qp1', species_name='Beam0003', n0_per_cc=5.03e15, gamma_threshold=1., use_num_list=True, start=0, count=99999, stride=1, linestyle='-', h_f=h_f, cell_size_qp_raw = np.array([0.046875, 0.046875, 0.025390625]))
     plt.tight_layout()
     plt.show()
