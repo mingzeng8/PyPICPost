@@ -42,7 +42,7 @@ class OutFile:
         # Some field naming problem in new HiPACE
         , 'plasma_electrons': '$\\rho_e$', 'driver': '$\\rho_d$', 'drive_beam': '$\\rho_d$', 'trailer': '$\\rho_t$'\
         # Some field naming in QuickPIC
-        , 'ez':'$E_z$', 'ex':'$E_x$', 'ey':'$E_y$', 'bz':'$B_z$', 'bx':'$B_x$', 'by':'$B_y$', 'charge_slice_xz':'$\\rho$'}
+        , 'ez':'$E_z$', 'ex':'$E_x$', 'ey':'$E_y$', 'bz':'$B_z$', 'bx':'$B_x$', 'by':'$B_y$', 'charge_slice_xz':'$\\rho$', 'ezslicexz':'$E_z$'}
         self._accepted_out_type = {'DENSITY', 'FLD', 'FLD_CYL_M', 'ION', 'PHA', 'RAW', 'TRACKS'}
         # if use_num_list = True, the actual out_num used is self._avail_num_list[out_num]
         self.use_num_list = use_num_list
@@ -326,7 +326,7 @@ class OutFile:
         else:
         # Obtain the grid information
 ##value _num_dimensions##
-            if self._out_type != 'RAW':
+            try:
                 #try to read the dimension from 'AXIS'
                 #for the code osiris, when plotting phasespace, the data matrix size may be different from the attribute NX
                 self._num_dimensions = len(self.fileid['AXIS'].keys())
@@ -343,9 +343,9 @@ class OutFile:
                     self.fileid['AXIS/AXIS{0}'.format(i+1)].read_direct(self._axis_range, np.s_[:], np.s_[:,i])
                     self._axis_labels.append('${}$'.format(self.fileid['AXIS/AXIS{0}'.format(i+1)].attrs.get('NAME')[0].decode("utf-8")))
                     self._axis_units.append('${}$'.format(self.fileid['AXIS/AXIS{0}'.format(i+1)].attrs.get('UNITS')[0].decode("utf-8")))
-            else:
+            except KeyError:
                 if self.code_name != 'quickpic':
-                    # For RAW data, 'AXIS' does not exist. Read simulation box information from the attribute
+                    # For RAW data, and HiPACE, 'AXIS' does not exist. Read simulation box information from the attribute
                     xmax = self.fileid.attrs.get('XMAX')
                     xmin = self.fileid.attrs.get('XMIN')
                     nx = self.fileid.attrs.get('NX')
@@ -1111,7 +1111,9 @@ class OutFile:
         if if_colorbar:
             self._color_bar = plt.colorbar(h_plot, ax=h_ax, orientation=colorbar_orientation)
             try: self._color_bar.set_label(self._field_names[self._data_name_in_file])
-            except: self._color_bar.set_label('Counts [arb. units]')
+            except:
+                #print(self._data_name_in_file)
+                self._color_bar.set_label('Counts [arb. units]')
         h_ax.set_title(self._fig_title)
         return h_fig, h_ax
 
@@ -1259,31 +1261,39 @@ class OutFile:
         return h_fig, h_ax
 
 ################################method raw_hist2D################################
-    def raw_hist2D(self, dims='p1x1', num_bins=128, range=None, if_select = False):
+    def raw_hist2D(self, dims=None, x_array=None, y_array=None, x_label=None, y_label=None, num_bins=128, range=None, if_reread =True, if_select = False):
         '''Generate 2D histogram for phasespace from raw data.
-           One does not have to read raw data before calling this.
-           dims can be combinations of 'x1', 'x2', 'x3', 'p1', 'p2', 'p3'.'''
-        weights=np.absolute(self.read_raw_q())
+           If if_reread is true, the raw data is read in this function and one does not have to read raw data before calling this. Otherwise one has to make sure thre required raw data is already read.
+           dims can be combinations of 'x1', 'x2', 'x3', 'p1', 'p2', 'p3'.
+           If dims is None, the x_array and y_array should be provided.'''
+        if if_reread: weights=np.absolute(self.read_raw_q())
+        else: weights=np.absolute(self._raw_q)
         if weights.size<2:
             warnings.warn("No particle contained in the RAW file! Skipping...")
             return
-        y_type = dims[0]
-        y_dir = int(dims[1])-1
-        x_type = dims[2]
-        x_dir = int(dims[3])-1
-        type_tuple = ('x','p')
-        if (y_type not in type_tuple) or (x_type not in type_tuple):
-            raise NotImplementedError('dims {} not implemented!'.format(dims))
-        if (y_dir > 2) or (x_dir > 2):
-            raise NotImplementedError('direction in dims should be in (1, 2, 3)!')
-        read_raw_tuple = ((self.read_raw_x1(), self.read_raw_x2(), self.read_raw_x3()), (self.read_raw_p1(), self.read_raw_p2(), self.read_raw_p3()))
-        #raw_tuple = ((self._raw_x1, self._raw_x2, self._raw_x3), (self._raw_p1, self._raw_p2, self._raw_p3))
-        label_tuple = (('$k_p z$', '$k_p x$', '$k_p y$'), ('$p_z / m_ec$', '$p_x / m_ec$', '$p_y / m_ec$'))
-        y_type_ind = type_tuple.index(y_type)
-        y_array = read_raw_tuple[y_type_ind][y_dir]
-        x_type_ind = type_tuple.index(x_type)
-        x_array = read_raw_tuple[x_type_ind][x_dir]
-        self._axis_labels = [label_tuple[x_type_ind][x_dir], label_tuple[y_type_ind][y_dir]]
+        if dims is None:
+            self._axis_labels = [x_label, y_label]
+        else:
+            y_type = dims[0]
+            y_dir = int(dims[1])-1
+            x_type = dims[2]
+            x_dir = int(dims[3])-1
+            type_tuple = ('x','p')
+            if (y_type not in type_tuple) or (x_type not in type_tuple):
+                raise NotImplementedError('dims {} not implemented!'.format(dims))
+            if (y_dir > 2) or (x_dir > 2):
+                raise NotImplementedError('direction in dims should be in (1, 2, 3)!')
+            y_type_ind = type_tuple.index(y_type)
+            x_type_ind = type_tuple.index(x_type)
+            label_tuple = (('$k_p z$', '$k_p x$', '$k_p y$'), ('$p_z / m_ec$', '$p_x / m_ec$', '$p_y / m_ec$'))
+            if if_reread:
+                raw_tuple = ((lambda:self.read_raw_x1(), lambda:self.read_raw_x2(), lambda:self.read_raw_x3()), (lambda:self.read_raw_p1(), lambda:self.read_raw_p2(), lambda:self.read_raw_p3()))
+            else:
+                raw_tuple = ((lambda:self._raw_x1, lambda:self._raw_x2, lambda:self._raw_x3), (lambda:self._raw_p1, lambda:self._raw_p2, lambda:self._raw_p3))
+            # The data is not actually read before calling the function handles
+            y_array = raw_tuple[y_type_ind][y_dir]()
+            x_array = raw_tuple[x_type_ind][x_dir]()
+            self._axis_labels = [label_tuple[x_type_ind][x_dir], label_tuple[y_type_ind][y_dir]]
         if if_select:
             try:
                 weights = weights[self._raw_select_index]
@@ -1298,11 +1308,11 @@ class OutFile:
         return
 
 ################################method plot_raw_hist2D################################
-    def plot_raw_hist2D(self, h_fig=None, h_ax=None, dims='p1x1', num_bins=128, range=None, if_select = False, **kwargs):
+    def plot_raw_hist2D(self, h_fig=None, h_ax=None, dims=None, x_array=None, y_array=None, x_label=None, y_label=None, num_bins=128, range=None, if_reread =True, if_select = False, **kwargs):
         '''Plot 2D histogram for phasespace from raw data.
            Please make sure the corresponding raw data is read before calling this.
            dims can be combinations of 'x1', 'x2', 'x3', 'p1', 'p2', 'p3'.'''
-        self.raw_hist2D(dims, num_bins, range, if_select)
+        self.raw_hist2D(dims=dims, x_array=x_array, y_array=y_array, x_label=x_label, y_label=y_label, num_bins=num_bins, range=range, if_reread=if_reread, if_select=if_select)
         h_fig, h_ax = self.plot_data(h_fig, h_ax, **kwargs)
         return h_fig, h_ax
 
@@ -1700,7 +1710,7 @@ if __name__ == '__main__':
         plt.tight_layout()
         plt.show()
     def beam_measure_beam3D():
-        file1 = OutFile(code_name='osiris',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_beam3D/os_beam3D262',field_name='raw',spec_name='He_e',use_num_list=True,out_num=50)
+        file1 = OutFile(code_name='osiris',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_beam3D/os_beam3D264',field_name='raw',spec_name='He_e',use_num_list=True,out_num=50)
         file1.open()
         file1.read_raw_q()
         file1.read_raw_p1()
@@ -1714,7 +1724,7 @@ if __name__ == '__main__':
         print('gamma_max = {}'.format(file1._raw_ene.max()+1.))
         ene_avg, ene_rms_spread = file1.raw_mean_rms_ene(if_select=True)
         emittance, twiss_parameters =file1.calculate_norm_rms_emittance_um(4.9e16, directions=(2,3), if_select=True)
-        h_fig, h_ax = file1.plot_raw_hist2D(dims='p2x2', if_select=True, if_log_colorbar=True)
+        h_fig, h_ax = file1.plot_raw_hist2D(dims='p1x1', if_select=True, if_log_colorbar=True)
         #file1.data_center_of_mass2d(weigh_threshold=1e1)
         #h_ax2 = h_ax.twinx()
         #file1.data2D_slice_spread(weigh_threshold=1e-1)
@@ -1846,10 +1856,10 @@ if __name__ == '__main__':
         file1.close()
         plt.show()
     def test_os():
-        file1 = OutFile(code_name='osiris',path='',field_name='raw',out_num=0)
-        file1.open(filename='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_qp_compare/hi3/trailer.h5')
-        print(file1._cell_size)
+        file1 = OutFile(code_name='osiris',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/os_PDMU/os_PDMU2',field_name='raw',spec_name='mu',out_num=17)
+        file1.open(filename = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/qp_hi_compare/qp_cinj/driver.h5')
         file1.read_raw_q()
+        file1.read_raw_x1()
         file1.read_raw_p1()
         file1.read_raw_x2()
         file1.read_raw_p2()
@@ -1858,13 +1868,15 @@ if __name__ == '__main__':
         file1.read_raw_ene()
         print('gamma_min = {}'.format(file1._raw_ene.min()+1.))
         print('gamma_max = {}'.format(file1._raw_ene.max()+1.))
-        #file1.select_raw_data(ene_up=2191.)
+        print('gamma_minux_pz_min = {}'.format(np.min(file1._raw_ene+1.-file1._raw_p1)))
+        #file1.select_raw_data(ene_low=2.)
         ene_avg, ene_rms_spread = file1.raw_mean_rms_ene(if_select=True)
-        emittance, twiss_parameters =file1.calculate_norm_rms_emittance_um(5.03e15, directions=(2,3), if_select=True)
-        print('Q = {} pC'.format(file1.calculate_q_pC(5.03e15, if_select=True)))
+        emittance, twiss_parameters =file1.calculate_norm_rms_emittance_um(5.0334e15, directions=(2,3), if_select=True)
+        print('Q = {} pC'.format(file1.calculate_q_pC(5.0334e15, if_select=True)))
         print('E = {} +- {} MeV'.format(ene_avg*0.511, ene_rms_spread*0.511))
         print('epsilon_x_norm = {} um, epsilon_y_norm = {} um'.format(emittance[0], emittance[1]))
-        h_fig, h_ax = file1.plot_raw_hist2D(dims='p1x1', if_select=True, if_log_colorbar=True, if_colorbar=True,range=[[19569.4, 19569.6], [5.,11.]])
+        h_fig, h_ax = file1.plot_raw_hist2D(dims='p1x1', if_reread=False, if_select=True, if_log_colorbar=True, if_colorbar=True)#,range=[[19569.4, 19569.6], [5.,11.]])
+        print(file1._raw_x1.max())
         file1.close()
     def test_hi():
         file1 = OutFile(code_name='hipace',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_qp_compare/hi3',field_name='raw',spec_name='trailer', use_num_list=True, out_num=584)
@@ -1888,9 +1900,8 @@ if __name__ == '__main__':
         h_fig, h_ax = file1.plot_raw_hist2D(dims='p1x1', if_select=True, if_log_colorbar=True, if_colorbar=True, vmin=.05, vmax=3.e2)
         file1.close()
     def test_qp():
-        file1 = OutFile(code_name='quickpic',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/qp_hi_compare/qp1',field_name='raw',spec_name='Beam0003', out_num=6900)
-        file1.open(cell_size_qp_raw = np.array([0.046875, 0.046875, 0.025390625]))
-        print(file1._cell_size)
+        file1 = OutFile(code_name='quickpic',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/qp_hi_compare/qp_cinj',field_name='raw',spec_name='Beam0001', out_num=0)
+        file1.open(cell_size_qp_raw = np.array([12/512, 12/512, 13/512]))
         file1.read_raw_q()
         file1.read_raw_p1()
         file1.read_raw_x2()
@@ -1902,11 +1913,12 @@ if __name__ == '__main__':
         print('gamma_max = {}'.format(file1._raw_ene.max()+1.))
         #file1.select_raw_data(ene_up=2191.)
         ene_avg, ene_rms_spread = file1.raw_mean_rms_ene(if_select=True)
-        emittance, twiss_parameters =file1.calculate_norm_rms_emittance_um(5.03e15, directions=(2,3), if_select=True)
-        print('Q = {} pC'.format(file1.calculate_q_pC(5.03e15, if_select=True)))
+        emittance, twiss_parameters =file1.calculate_norm_rms_emittance_um(5.0334e15, directions=(2,3), if_select=True)
+        print('Q = {} pC'.format(file1.calculate_q_pC(5.0334e15, if_select=True)))
         print('E = {} +- {} MeV'.format(ene_avg*0.511, ene_rms_spread*0.511))
         print('epsilon_x_norm = {} um, epsilon_y_norm = {} um'.format(emittance[0], emittance[1]))
         h_fig, h_ax = file1.plot_raw_hist2D(dims='p1x1', if_select=True, if_log_colorbar=True, if_colorbar=True)
+        print(file1._raw_x1.min())
         file1.close()
     def test_profile():
         dir=2
@@ -1924,8 +1936,8 @@ if __name__ == '__main__':
         plt.show()
 
     test_os()
-    test_hi()
-    test_qp()
+    #test_hi()
+    #test_qp()
     plt.show()
     #beam_measure()
     #beam_measure_hi()
