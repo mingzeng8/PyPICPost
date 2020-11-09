@@ -11,7 +11,7 @@ import matplotlib as mpl
 mpl.use('Agg')
 
 class Frames:
-    def __init__(self, code_name = 'osiris', simulation_path = None, frame_folder = None, plot_type = 'laser_driven', plot_spec_name=None, average='', use_num_list = False, start_num = 0, stride_num=1, count_num=1, driver_spec_name='driver', driver_vmin=None, driver_vmax=None, background_spec_name='e', background_vmin=None, background_vmax=None, trail_spec_name=None, trail_vmin=None, trail_vmax=None, if_e1=False, e1_multiple=1., if_psi=False, psi_multiple=1., if_driver_cm=False, if_trail_cm=False, dir=2, save_type='png', max_missing_file=0, plot_range=None):
+    def __init__(self, code_name = 'osiris', simulation_path = None, frame_folder = None, plot_type = 'laser_driven', plot_spec_name=None, average='', use_num_list = False, start_num = 0, stride_num=1, count_num=1, laser_field_name='e3', driver_spec_name='driver', driver_vmin=None, driver_vmax=None, background_spec_name='e', background_vmin=None, background_vmax=None, trail_spec_name=None, trail_vmin=None, trail_vmax=None, if_e1=False, e1_multiple=1., if_psi=False, psi_multiple=1., if_driver_cm=False, if_trail_cm=False, dir=2, save_type='png', max_missing_file=0, plot_range=None):
         self.code_name = code_name
         self.simulation_path = simulation_path
         if frame_folder is None:
@@ -38,6 +38,7 @@ class Frames:
         self.plot_type = plot_type
         # For phasespace plots, i.e. plot_type = 'p1x1' or so on, one has to give plot_spec_name
         self.plot_spec_name = plot_spec_name
+        self.laser_field_name = laser_field_name
         self.driver_spec_name = driver_spec_name
         self.driver_vmin = driver_vmin
         self.driver_vmax = driver_vmax
@@ -154,6 +155,17 @@ class Frames:
 
     plot_type = property(get_plot_type, set_plot_type)
 
+################################property laser_field_name################################
+    def get_laser_field_name(self):
+        return self._laser_field_name
+
+    def set_laser_field_name(self, value):
+        laser_fields = {'e1','e2','e3',None}
+        if value not in laser_fields: raise ValueError('laser_field_name = {}, but allowed values are {}.'.format(value, laser_fields))
+        self._laser_field_name = value
+
+    laser_field_name = property(get_laser_field_name, set_laser_field_name)
+
 ################################method plot_beam_driven################################
 #plot one frame for beam driven cases
     def plot_beam_driven(self, out_num):
@@ -258,16 +270,47 @@ class Frames:
             self.outfile._color_bar.set_label('$\\rho_t$')
             self.outfile.close()
 
-        self.outfile.field_name='e3'
-        self.outfile.open()
-        if self.outfile.num_dimensions>=3: self.outfile.read_data_slice(dir=self.dir)
-        else: self.outfile.read_data()
-        if if_laser_profile:
-            self.outfile.data_profile2d()
-            self.outfile.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_lower_range_transparent(plt.cm.Reds, transparency_transition_region=[0.15,0.4]))
-        else: self.outfile.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_middle_range_transparent())
-        self.outfile._color_bar.set_label('$E_y$')
-        self.outfile.close()
+        if self.laser_field_name is not None:
+            self.outfile.field_name=self.laser_field_name
+            self.outfile.open()
+            if self.outfile.num_dimensions>=3: self.outfile.read_data_slice(dir=self.dir)
+            else: self.outfile.read_data()
+            if if_laser_profile:
+                self.outfile.data_profile2d()
+                self.outfile.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_lower_range_transparent(plt.cm.Reds, transparency_transition_region=[0.15,0.4]))
+            else: self.outfile.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_middle_range_transparent())
+            self.outfile._color_bar.set_label('$E_L$')
+            self.outfile.close()
+
+        if self.if_e1:
+            self.outfile.field_name='e1'
+            self.outfile.open()
+            self.outfile.read_data_lineout()
+            self.outfile.plot_data(h_fig, h_ax, if_ylabel=False, multiple=self.e1_multiple, c='r', ls='-')
+            self.outfile.close()
+
+        if self.if_psi:
+            self.outfile.field_name='psi'
+            if not os.path.isfile(self.outfile.path_filename):
+                warnings.warn('Psi file not found. Try to get psi by integrating Ez.')
+            # No psi file, get psi by integrating e1 if e1 is already read
+                if self.if_e1:
+                    if self.code_name != 'quickpic':
+                    # For OSIRIS and HiPACE, psi is e1 integration from right to left
+                        e1 = np.flip(self.outfile._data)
+                    else: e1 = self.outfile._data
+                    np.cumsum(e1*self.outfile._axis_slices[0].step, out=self.outfile._data)
+                    if self.code_name != 'quickpic':
+                    # For OSIRIS and HiPACE, flip the data
+                        self.outfile._data = np.flip(self.outfile._data)
+                else: warnings.warn('Ez is not read. Please set if_e1 to True.')
+            else:
+            # There is psi file, read psi normally
+                self.outfile.open()
+                self.outfile.read_data_lineout()
+                self.outfile.close()
+            self.outfile.plot_data(h_fig, h_ax, if_ylabel=False, multiple=self.psi_multiple, c='b', ls='-')
+
         plt.tight_layout()
         return h_fig
 
