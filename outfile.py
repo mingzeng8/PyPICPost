@@ -26,7 +26,7 @@ class OutFile:
         #self.out_type = out_type
         self.field_name = field_name
         self.average = average
-        # fld_slice can be 1, 2 or 3 (for QuickPIC)
+        # fld_slice can be 1, 2 or 3 (for slice dumps in QuickPIC and OSIRIS)
         self.fld_slice = fld_slice
         #2D cylindrical modes for fields
         self.cyl_m_num = cyl_m_num
@@ -192,11 +192,20 @@ class OutFile:
         if 'osiris' == self.code_name:
             main_folder_path = '{}/MS/{}'.format(self.path, self.out_type)
             if 'DENSITY' == self._out_type:
-                self._prefix_filename = '{0}/{1}/{2}{3}/{2}{3}-{1}-'.format(main_folder_path, self.spec_name, self.field_name, self.average)
+                if self.fld_slice is None:
+                    self._prefix_filename = '{0}/{1}/{2}{3}/{2}{3}-{1}-'.format(main_folder_path, self.spec_name, self.field_name, self.average)
+                else:
+                    self._prefix_filename = '{0}/{1}/{2}-slice/{2}-slice-{1}-x{3}-01-'.format(main_folder_path, self.spec_name, self.field_name, self.fld_slice)
             elif 'ION' == self._out_type:
-                self._prefix_filename = '{0}/{1}/{2}/{2}-{1}-'.format(main_folder_path, self.spec_name, self.field_name)
+                if self.fld_slice is None:
+                    self._prefix_filename = '{0}/{1}/{2}/{2}-{1}-'.format(main_folder_path, self.spec_name, self.field_name)
+                else:
+                    self._prefix_filename = '{0}/{1}/{2}-slice/{2}-slice-{1}-x{3}-01-'.format(main_folder_path, self.spec_name, self.field_name, self.fld_slice)
             elif 'FLD' == self._out_type:
-                self._prefix_filename = '{0}/{1}{2}/{1}{2}-'.format(main_folder_path, self.field_name, self.average)
+                if self.fld_slice is None:
+                    self._prefix_filename = '{0}/{1}{2}/{1}{2}-'.format(main_folder_path, self.field_name, self.average)
+                else:
+                    self._prefix_filename = '{0}/{1}-slice/{1}-slice-x{2}-01-'.format(main_folder_path, self.field_name, self.fld_slice)
             elif 'FLD_CYL_M' == self._out_type:
                 self._prefix_filename = '{0}/MODE-{1}-{2}/{3}/{3}-{1}-{4}-'.format(main_folder_path, self.cyl_m_num, self.cyl_m_re_im.upper(), self.field_name, self.cyl_m_re_im.lower())
             elif 'PHA' == self._out_type:
@@ -254,7 +263,7 @@ class OutFile:
         file_list = glob(format_string.format('*'))
         try: num_list=[int(parse.parse(format_string, file_list[i])[0]) for i in range(len(file_list))]
         except ValueError: num_list=[float(parse.parse(format_string, file_list[i])[0]) for i in range(len(file_list))]
-        if len(num_list)<1: raise RuntimeError('num_list is empty! Check the file path. format_string = {}'.format(format_string))
+        if len(num_list)<1: raise FileNotFoundError('num_list is empty! Check the file path. format_string = {}'.format(format_string))
         num_list.sort()
         self._avail_num_list = num_list
 
@@ -340,7 +349,8 @@ class OutFile:
                 self._axis_labels = []
                 self._axis_units = []
                 for i in range(self._num_dimensions):
-                    self.fileid['AXIS/AXIS{0}'.format(i+1)].read_direct(self._axis_range, np.s_[:], np.s_[:,i])
+                    #self.fileid['AXIS/AXIS{0}'.format(i+1)].read_direct(self._axis_range, np.s_[:], np.s_[:,i])
+                    self._axis_range[:,i] = self.fileid['AXIS/AXIS{0}'.format(i+1)][()]
                     self._axis_labels.append('${}$'.format(self.fileid['AXIS/AXIS{0}'.format(i+1)].attrs.get('NAME')[0].decode("utf-8")))
                     self._axis_units.append('${}$'.format(self.fileid['AXIS/AXIS{0}'.format(i+1)].attrs.get('UNITS')[0].decode("utf-8")))
             except KeyError:
@@ -1085,11 +1095,12 @@ class OutFile:
             self._axis_slices = np.flip(self._axis_slices)
             self._axis_labels = np.flip(self._axis_labels)
             self._axis_units = np.flip(self._axis_units)
-        if if_z2zeta:
-            x_slice = slice(self._axis_slices[0].start-self.time, self._axis_slices[0].stop-self.time, self._axis_slices[0].step)
-        else:
-            x_slice = self._axis_slices[0]
-        y_spread, x_spread = np.mgrid[self._axis_slices[1], x_slice]
+        if if_z2zeta: z_offset = -self.time
+        else: z_offset = 0.
+        # For pcolormesh, the grid should be 1 cell larger than the plot data. So slice stop is added by one step here.
+        x_slice = slice(self._axis_slices[0].start+z_offset, self._axis_slices[0].stop+z_offset+self._axis_slices[0].step, self._axis_slices[0].step)
+        y_slice = slice(self._axis_slices[1].start, self._axis_slices[1].stop+self._axis_slices[1].step, self._axis_slices[1].step)
+        y_spread, x_spread = np.mgrid[y_slice, x_slice]
         if h_fig is None:
             h_fig = plt.figure()
         if h_ax is None:
@@ -1935,19 +1946,13 @@ if __name__ == '__main__':
         file1.close()
         plt.show()
 
-    test_os()
-    #test_hi()
-    #test_qp()
-    plt.show()
-    #beam_measure()
-    #beam_measure_hi()
-    #hi_beam3D()
-    #beam_measure_beam3D()
-    #tracking()
-    #select_tag()
-    #tmp_hipace3D()
-    #scatter()
-    #tmp_3D()
-    #X1plot()
-    #oblique_laser_3D()
-    #test_profile()
+    def test_os_slice():
+        dir=2
+        file1 = OutFile(path='/home/ming/mnt/BSCC_HOME/jobs/os_DCLBII/1',field_name='e3',spec_name='neutral_1',out_num=50, fld_slice=3)
+        print(file1.path_filename)
+        file1.open()
+        file1.read_data()
+        file1.plot_data()
+        plt.show()
+        
+    test_os_slice()

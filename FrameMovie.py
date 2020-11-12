@@ -27,7 +27,7 @@ class Frames:
             elif dir==2:
                 if code_name == 'quickpic': frame_surf = 'slice_y-z'
                 else: frame_surf = 'slice_x-z'
-            else: raise ValueError('dir should be 1, 2 or 3.')
+            else: raise ValueError('dir should be 0, 1, or 2.')
             frame_folder = frame_pref+'/'+frame_surf
         self.frame_path = simulation_path+'/'+frame_folder
         # when use_num_list is True, scan the folder and generate a list of all available fils.
@@ -62,12 +62,16 @@ class Frames:
         self.max_missing_file = max_missing_file
         self.plot_range = plot_range
         # Initialize outfile object, especially initialize avail_num_list if use_num_list.
+        # We will look up for full grid dump first.
         if self.plot_type in {'beam_driven', 'laser_driven'}:
             try:
+                # For full grid dumps
                 self.outfile = outfile.OutFile(code_name = code_name, path=simulation_path, field_name='charge', average=average, spec_name=background_spec_name, use_num_list = use_num_list, out_num=start_num)
-            except RuntimeError:
-                # For QuickPIC, fields may saved as slices
-                self.outfile = outfile.OutFile(code_name = code_name, path=simulation_path, field_name='charge', average=average, spec_name=background_spec_name, use_num_list = use_num_list, out_num=start_num, fld_slice=dir)
+            except FileNotFoundError:
+                # If use_num_list is True, outfile.OutFile() will try to setup a file list while initialize. But if no suitable full grid dump file is found, we try to find the slice dumps.
+                # For QuickPIC and OSIRIS, fields may saved as slices
+                # fld_slice in {1, 2, 3} while dir in (0, 1, 2)
+                self.outfile = outfile.OutFile(code_name = code_name, path=simulation_path, field_name='charge', average=average, spec_name=background_spec_name, use_num_list = use_num_list, out_num=start_num, fld_slice=dir+1)
         else:
             self.outfile = outfile.OutFile(code_name = code_name, path=simulation_path, field_name='raw', spec_name=plot_spec_name, use_num_list = use_num_list, out_num=start_num)
 
@@ -387,5 +391,5 @@ class Frames:
 #        subprocess.call('mencoder \'{0}/*.png\' -mf type=png:fps=10 -ovc lavc -lavcopts vcodec=wmv2 -oac copy -o {0}/movie.mpg'.format(self.frame_path), shell=True)
 
 if __name__ == '__main__':
-    frame1 = Frames(code_name = 'quickpic', simulation_path = '/public3/home/sc52073/zengm/qp_longdriver8', plot_type = 'beam_driven', use_num_list = True, start_num = 0, stride_num=1, count_num=99999, background_spec_name='Species0001', background_vmin=-5, driver_spec_name='Beam0001', driver_vmin=-20, trail_spec_name=None, trail_vmin=-20, if_e1=True, if_psi=True, dir=2)
+    frame1 = Frames(simulation_path = '/home/ming/mnt/BSCC_HOME/jobs/os_DCLBII/2', plot_type = 'laser_driven', use_num_list = True, start_num = 0, stride_num=1, count_num=99999, laser_field_name = 'e3', background_spec_name='e', background_vmin=-5, trail_spec_name='O_e', trail_vmin=-20, if_e1=True, if_psi=True, dir=2)
     frame1.save_frames()
