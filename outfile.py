@@ -1280,8 +1280,7 @@ class OutFile:
         if if_reread: weights=np.absolute(self.read_raw_q())
         else: weights=np.absolute(self._raw_q)
         if weights.size<2:
-            warnings.warn("No particle contained in the RAW file! Skipping...")
-            return
+            raise RuntimeError("No or too few particle is found in the RAW file!")
         if dims is None:
             self._axis_labels = [x_label, y_label]
         else:

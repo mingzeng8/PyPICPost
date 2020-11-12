@@ -320,7 +320,7 @@ class Frames:
 
 ################################method plot_p1x1################################
 #plot one frame of p1x1 for species self.trail_spec_name
-# This method is deprecated. It's function can be replaced by plot_trail_phasespace_raw
+# This method is deprecated. It's function can be replaced by plot_phasespace_raw
 #    def plot_p1x1(self, out_num):
 #        h_fig = plt.figure(figsize=(6.5,5))
 #        file1 = outfile.OutFile(path=self.simulation_path, field_name='p1x1', average='', spec_name=self.trail_spec_name, use_num_list = self.use_num_list, out_num=out_num)
@@ -333,15 +333,22 @@ class Frames:
 #        plt.tight_layout()
 #        return h_fig
 
-################################method plot_trail_phasespace_raw################################
+################################method plot_phasespace_raw################################
 #plot one frame of phasespace for species self.trail_spec_name. Phasespace is constructed from raw data. Phasespace type is determined by self.plot_type.
-    def plot_trail_phasespace_raw(self, out_num):
+    def plot_phasespace_raw(self, out_num):
         h_fig = plt.figure(figsize=(6.5,5))
         self.outfile.spec_name=self.plot_spec_name
         self.outfile.out_num=out_num
         h_ax = h_fig.add_subplot(111)
         self.outfile.open()
-        self.outfile.plot_raw_hist2D(h_fig, h_ax, dims=self.plot_type, cmap=my_cmap.cmap_lower_range_transparent(), if_log_colorbar=False, range=self.plot_range)
+        try:
+            self.outfile.plot_raw_hist2D(h_fig, h_ax, dims=self.plot_type, cmap=my_cmap.cmap_lower_range_transparent(), if_log_colorbar=False, range=self.plot_range)
+            self.outfile.close()
+        except RuntimeError:
+            # RuntimeError is raised if too few particle is found in the raw file.
+            print('Cannot plot 2D histogram. Try next...')
+            self.outfile.close()
+            return None
         self.outfile.close()
         plt.tight_layout()
         return h_fig
@@ -360,9 +367,10 @@ class Frames:
             print('Working on number {}.'.format(out_num))
             if 'beam_driven' == self.plot_type: h_fig = self.plot_beam_driven(*args, **kwargs)
             elif 'laser_driven' == self.plot_type: h_fig = self.plot_laser_driven(*args, **kwargs)
-            else: h_fig = self.plot_trail_phasespace_raw(*args, **kwargs)
-            plt.savefig(save_file_name, format=self.save_type)
-            plt.close(h_fig)
+            else: h_fig = self.plot_phasespace_raw(*args, **kwargs)
+            if h_fig is not None:
+                plt.savefig(save_file_name, format=self.save_type)
+                plt.close(h_fig)
 
 ################################method save_frames################################
 #save all frames
@@ -391,5 +399,6 @@ class Frames:
 #        subprocess.call('mencoder \'{0}/*.png\' -mf type=png:fps=10 -ovc lavc -lavcopts vcodec=wmv2 -oac copy -o {0}/movie.mpg'.format(self.frame_path), shell=True)
 
 if __name__ == '__main__':
+    # An example
     frame1 = Frames(simulation_path = '/home/ming/mnt/BSCC_HOME/jobs/os_DCLBII/2', plot_type = 'laser_driven', use_num_list = True, start_num = 0, stride_num=1, count_num=99999, laser_field_name = 'e3', background_spec_name='e', background_vmin=-5, trail_spec_name='O_e', trail_vmin=-20, if_e1=True, if_psi=True, dir=2)
     frame1.save_frames()
