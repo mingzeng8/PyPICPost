@@ -1097,9 +1097,9 @@ class OutFile:
             self._axis_units = np.flip(self._axis_units)
         if if_z2zeta: z_offset = -self.time
         else: z_offset = 0.
-        # For pcolormesh, the grid should be 1 cell larger than the plot data. So slice stop is added by one step here.
-        x_slice = slice(self._axis_slices[0].start+z_offset, self._axis_slices[0].stop+z_offset+self._axis_slices[0].step, self._axis_slices[0].step)
-        y_slice = slice(self._axis_slices[1].start, self._axis_slices[1].stop+self._axis_slices[1].step, self._axis_slices[1].step)
+        # For pcolormesh, the grid should be 1 cell larger than the plot data.
+        x_slice = slice(self._axis_slices[0].start+z_offset-self._axis_slices[0].step/2, self._axis_slices[0].stop+z_offset+self._axis_slices[0].step/2, self._axis_slices[0].step)
+        y_slice = slice(self._axis_slices[1].start-self._axis_slices[0].step/2, self._axis_slices[1].stop+self._axis_slices[1].step/2, self._axis_slices[1].step)
         y_spread, x_spread = np.mgrid[y_slice, x_slice]
         if h_fig is None:
             h_fig = plt.figure()
@@ -1312,7 +1312,9 @@ class OutFile:
             except: warnings.warn('Particle select condition is not valid! All particles are used.')
         self._data, yedges, xedges = np.histogram2d(y_array, x_array, bins=num_bins, range=range, weights=weights)
         #self._data=np.transpose(self._data)
-        self._axis_slices = [slice(xedges[0], xedges[-1], xedges[1]-xedges[0]), slice(yedges[0], yedges[-1], yedges[1]-yedges[0])]
+        half_x_step = (xedges[1]-xedges[0])/2
+        half_y_step = (yedges[1]-yedges[0])/2
+        self._axis_slices = [slice(xedges[0]+half_x_step, xedges[-1]-half_x_step, xedges[1]-xedges[0]), slice(yedges[0]+half_y_step, yedges[-1]-half_y_step, yedges[1]-yedges[0])]
         self._axis_units = [None,None]
         self._fig_title = 't = {0:.2f}, phasespace'.format(self.time)
         return
