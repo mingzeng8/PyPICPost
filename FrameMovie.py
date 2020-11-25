@@ -101,7 +101,7 @@ class Frames:
                 raise IOError('\'{0}\' is a file! Use a empty folder instead.'.format(tmp_path))
             elif os.path.isdir(tmp_path):
                 if [] != os.listdir(tmp_path):
-                    print('Warning: \'{0}\' is not empty! Existing files will not be overwritten.'.format(tmp_path))
+                    print('Warning: \'{0}\' is not empty!'.format(tmp_path))
             else:
                 print('Warning: \'{0}\' does not exist! But we are creating it for use.'.format(tmp_path))
                 os.makedirs(tmp_path)
@@ -360,17 +360,26 @@ class Frames:
             out_num = kwargs['out_num']
         else:
             out_num = args[0]
+        if 'overwrite' in kwargs:
+            overwrite = kwargs['overwrite']
+            kwargs.pop('overwrite')
+        else:
+            overwrite = False
         save_file_name = '{0}/{1}.{2}'.format(self.frame_path, out_num, self.save_type)
         if os.path.isfile(save_file_name):
-            print('Skipping existing number {}.'.format(out_num))
+            if overwrite:
+                print('Overwritting number {}.'.format(out_num))
+            else:
+                print('Skipping existing number {}.'.format(out_num))
+                return
         else:
             print('Working on number {}.'.format(out_num))
-            if 'beam_driven' == self.plot_type: h_fig = self.plot_beam_driven(*args, **kwargs)
-            elif 'laser_driven' == self.plot_type: h_fig = self.plot_laser_driven(*args, **kwargs)
-            else: h_fig = self.plot_phasespace_raw(*args, **kwargs)
-            if h_fig is not None:
-                plt.savefig(save_file_name, format=self.save_type)
-                plt.close(h_fig)
+        if 'beam_driven' == self.plot_type: h_fig = self.plot_beam_driven(*args, **kwargs)
+        elif 'laser_driven' == self.plot_type: h_fig = self.plot_laser_driven(*args, **kwargs)
+        else: h_fig = self.plot_phasespace_raw(*args, **kwargs)
+        if h_fig is not None:
+            plt.savefig(save_file_name, format=self.save_type)
+            plt.close(h_fig)
 
 ################################method save_frames################################
 #save all frames
@@ -401,4 +410,4 @@ class Frames:
 if __name__ == '__main__':
     # An example
     frame1 = Frames(simulation_path = '/home/ming/mnt/BSCC_HOME/jobs/os_DCLBII/2', plot_type = 'laser_driven', use_num_list = True, start_num = 0, stride_num=1, count_num=99999, laser_field_name = 'e3', background_spec_name='e', background_vmin=-5, trail_spec_name='O_e', trail_vmin=-20, if_e1=True, if_psi=True, dir=2)
-    frame1.save_frames()
+    #frame1.save_frames()

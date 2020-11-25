@@ -1099,7 +1099,7 @@ class OutFile:
         else: z_offset = 0.
         # For pcolormesh, the grid should be 1 cell larger than the plot data.
         x_slice = slice(self._axis_slices[0].start+z_offset-self._axis_slices[0].step/2, self._axis_slices[0].stop+z_offset+self._axis_slices[0].step/2, self._axis_slices[0].step)
-        y_slice = slice(self._axis_slices[1].start-self._axis_slices[0].step/2, self._axis_slices[1].stop+self._axis_slices[1].step/2, self._axis_slices[1].step)
+        y_slice = slice(self._axis_slices[1].start-self._axis_slices[1].step/2, self._axis_slices[1].stop+self._axis_slices[1].step/2, self._axis_slices[1].step)
         y_spread, x_spread = np.mgrid[y_slice, x_slice]
         if h_fig is None:
             h_fig = plt.figure()
