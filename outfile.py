@@ -12,13 +12,19 @@ import os, warnings
 try: import parse
 except ImportError: warnings.warn('Cannot import lib \'parse\'. num_list cannot be activated.')
 import my_cmap
+try:
+    from openpmd_viewer.openpmd_timeseries.data_reader.field_reader import read_field_circ as opmd_read_field_circ
+    from openpmd_viewer.openpmd_timeseries.data_reader.particle_reader import read_species_data as opmd_read_raw
+    from openpmd_viewer.openpmd_timeseries.data_reader.params_reader import read_openPMD_params as opmd_read_params
+    from openpmd_viewer.openpmd_timeseries.utilities import combine_cylindrical_components as opmd_comb_cyl
+except ImportError: warnings.warn('Cannot import lib \'openpmd_viewer\'. Cannot read openPMD files.')
 
 float_type=np.float64
 
 class OutFile:
-    def __init__(self, code_name = 'osiris', path = '.', out_type = None, field_name = 'e3', spec_name = '', use_num_list = False, out_num = 0, average='', fld_slice=None, cyl_m_num = 0, cyl_m_re_im='re'):
+    def __init__(self, code_name = 'osiris', path = '.', out_type = None, field_name = 'e3', spec_name = None, use_num_list = False, out_num = 0, average='', fld_slice=None, cyl_m_num = 0, cyl_m_re_im='re'):
 ##value digit_num##
-        self._accepted_code_name = {'osiris', 'quickpic', 'hipace'}
+        self._accepted_code_name = {'osiris', 'quickpic', 'hipace', 'fbpic'}
         self.code_name = code_name.lower()
         self.path = path
         self.spec_name = spec_name
@@ -60,8 +66,9 @@ class OutFile:
         if value=='quickpic': self._axis_labels_original = ('$\\xi$', 'x', 'y', '$p_z$', '$p_x$', '$p_y$')
         elif value=='hipace': self._axis_labels_original = ('$\\zeta$', 'x', 'y', '$p_z$', '$p_x$', '$p_y$')
         else: self._axis_labels_original = ('z', 'x', 'y', '$p_z$', '$p_x$', '$p_y$')
-        if 'quickpic' == self.code_name: self.digit_num = 8
+        if self.code_name in {'quickpic', 'fbpic'}: self.digit_num = 8
         else: self.digit_num = 6
+        if self.code_name in {'hipace', 'quickpic', 'fbpic'}: self._num_dimensions = 3
         ''' Deprecated
         # Set the AXIS group and data matrix axis sequence of the h5 file for different codes
         if value in {'osiris'}:
@@ -120,8 +127,8 @@ class OutFile:
         return self._spec_name
 
     def set_spec_name(self, value):
-        if not isinstance(value, str):
-            raise TypeError('spec_name should be a string!'.format(value))
+        if not (isinstance(value, str) or (value is None)):
+            raise TypeError('spec_name should be a string or None!'.format(value))
         self._spec_name = value
 
     spec_name = property(get_spec_name, set_spec_name)
@@ -155,6 +162,8 @@ class OutFile:
         if self.use_num_list:
             #try: self._avail_num_list
             #except: self.reset_avail_num_list()
+            # One can also set out_num=-1, -2 and so on
+            if value < 0: value += len(self._avail_num_list)
             if value not in range(len(self._avail_num_list)):
                 #print('self._avail_num_list is ({})'.format(self._avail_num_list))
                 raise KeyError('Using num_list. out_num = {}, not in range({})!'.format(value, len(self._avail_num_list)))
@@ -248,10 +257,12 @@ class OutFile:
                 self._prefix_filename = '{0}/field_{1}_'.format(main_folder_path, hi_fld_dict[self.field_name])
             elif 'RAW' == self._out_type:
                 self._prefix_filename = '{0}/raw_{1}_'.format(main_folder_path, self.spec_name)
+        elif 'fbpic' == self.code_name:
+            self._prefix_filename = '{0}/hdf5/data'.format(self.path)
         else:
             raise NotImplementedError('Code name {} not implemented!'.format(self.code_name))
 
-################################ avail_num_list ################################
+################################ Property avail_num_list ################################
 # obtain the number list from the simulation output folder
     def get_avail_num_list(self):
         self.reset_avail_num_list()
@@ -266,6 +277,11 @@ class OutFile:
         if len(num_list)<1: raise FileNotFoundError('num_list is empty! Check the file path. format_string = {}'.format(format_string))
         num_list.sort()
         self._avail_num_list = num_list
+
+    def set_avail_num_list(self, value):
+        raise RuntimeError('You cannot set avail_num_list directly! It is reset by OutFile.reset_avail_num_list() method.')
+
+    avail_num_list = property(get_avail_num_list, set_avail_num_list)
 
 ################################property path_filename################################
     def get_path_filename(self):
@@ -330,8 +346,12 @@ class OutFile:
         if filename is None: filename=self.path_filename
         if not os.path.isfile(filename): raise FileNotFoundError('File {} not found!'.format(filename))
         self.fileid = h5py.File(filename,'r')
+        if self.code_name == 'fbpic':
+            self._num_dimensions = 3
+            self._time, params0 = opmd_read_params(filename)
+            self.fb_extensions = params0['extensions']
         # Do not obtain the grid information if the type is TRACKS
-        if self._out_type == 'TRACKS': pass
+        elif self._out_type == 'TRACKS': pass
         else:
         # Obtain the grid information
 ##value _num_dimensions##
@@ -384,69 +404,110 @@ class OutFile:
 
 ################################method close################################
     def close(self):
-        self.fileid.close()
+        # For fbpic, close of h5 file is done while read date
+        if self.code_name != 'fbpic':
+            self.fileid.close()
 
 ################################method read_raw_tag################################
     def read_raw_tag(self):
         '''In osiris the tag for one macro particle has two numbers:
            the first is the process index, and the second is the particle index.'''
-        self._raw_tag = np.zeros(self.fileid['tag'].shape, dtype=int)
-        self.fileid['tag'].read_direct(self._raw_tag)
+        #self._raw_tag = np.zeros(self.fileid['tag'].shape, dtype=int)
+        #self.fileid['tag'].read_direct(self._raw_tag)
+        return self.read_raw('tag')
 
 ################################method read_raw_q################################
     def read_raw_q(self):
-        self._raw_q = np.zeros(self.fileid['q'].shape, dtype=float_type)
-        self.fileid['q'].read_direct(self._raw_q)
-        return self._raw_q
+        #self._raw_q = np.zeros(self.fileid['q'].shape, dtype=float_type)
+        #self.fileid['q'].read_direct(self._raw_q)
+        #return self._raw_q
+        return self.read_raw('q')
 
 ################################method read_raw_x1################################
     def read_raw_x1(self):
-        if self.code_name == 'quickpic': self._raw_x1 = self.fileid['x3'][()]
-        else: self._raw_x1 = self.fileid['x1'][()]
-        return self._raw_x1
+        #if self.code_name == 'quickpic': self._raw_x1 = self.fileid['x3'][()]
+        #else: self._raw_x1 = self.fileid['x1'][()]
+        #return self._raw_x1
+        return self.read_raw('x1')
 
 ################################method read_raw_x2################################
     def read_raw_x2(self):
-        if self.code_name == 'quickpic': self._raw_x2 = self.fileid['x1'][()]
-        else: self._raw_x2 = self.fileid['x2'][()]
-        return self._raw_x2
+        #if self.code_name == 'quickpic': self._raw_x2 = self.fileid['x1'][()]
+        #else: self._raw_x2 = self.fileid['x2'][()]
+        #return self._raw_x2
+        return self.read_raw('x2')
 
 ################################method read_raw_x3################################
     def read_raw_x3(self):
-        if self.code_name == 'quickpic': self._raw_x3 = self.fileid['x2'][()]
-        else: self._raw_x3 = self.fileid['x3'][()]
-        return self._raw_x3
+        #if self.code_name == 'quickpic': self._raw_x3 = self.fileid['x2'][()]
+        #else: self._raw_x3 = self.fileid['x3'][()]
+        #return self._raw_x3
+        return self.read_raw('x3')
 
 ################################method read_raw_p1################################
     def read_raw_p1(self):
-        if self.code_name == 'quickpic': self._raw_p1 = self.fileid['p3'][()]
-        else: self._raw_p1 = self.fileid['p1'][()]
-        return self._raw_p1
+        #if self.code_name == 'quickpic': self._raw_p1 = self.fileid['p3'][()]
+        #else: self._raw_p1 = self.fileid['p1'][()]
+        #return self._raw_p1
+        return self.read_raw('p1')
 
 ################################method read_raw_p2################################
     def read_raw_p2(self):
-        if self.code_name == 'quickpic': self._raw_p2 = self.fileid['p1'][()]
-        else: self._raw_p2 = self.fileid['p2'][()]
-        return self._raw_p2
+        #if self.code_name == 'quickpic': self._raw_p2 = self.fileid['p1'][()]
+        #else: self._raw_p2 = self.fileid['p2'][()]
+        #return self._raw_p2
+        return self.read_raw('p2')
 
 ################################method read_raw_p3################################
     def read_raw_p3(self):
-        if self.code_name == 'quickpic': self._raw_p3 = self.fileid['p2'][()]
-        else: self._raw_p3 = self.fileid['p3'][()]
-        return self._raw_p3
+        #if self.code_name == 'quickpic': self._raw_p3 = self.fileid['p2'][()]
+        #else: self._raw_p3 = self.fileid['p3'][()]
+        #return self._raw_p3
+        return self.read_raw('p3')
+
+################################method read_raw_gamma################################
+    def read_raw_gamma(self):
+        self._raw_gamma = np.sqrt(1.+np.square(self.read_raw('p1'))+np.square(self.read_raw('p2'))+np.square(self.read_raw('p3')))
+        return self._raw_gamma
 
 ################################method read_raw_ene################################
     def read_raw_ene(self, ene_key_warning=True):
         try:
-            self._raw_ene = np.zeros(self.fileid['ene'].shape, dtype=float_type)
-            self.fileid['ene'].read_direct(self._raw_ene)
+            self._raw_ene = self.read_raw('ene')
+            #self._raw_ene = np.zeros(self.fileid['ene'].shape, dtype=float_type)
+            #self.fileid['ene'].read_direct(self._raw_ene)
         except KeyError:
             if ene_key_warning:
             #by default, if 'ene' key does not exist, print the following warning message.
             #but one can explicitly silence this message by setting ene_key_warning=False
-                warnings.warn('Warning! Key \'ene\' does not exist in particle raw data! Reading p1, p2, p3 and doing ene=sqrt(p1^2+p2^2+p3^2)-1 instead. Please make sure p1, p2, p3 are read before this!')
-            self._raw_ene = np.sqrt(np.square(self._raw_p1)+np.square(self._raw_p2)+np.square(self._raw_p3))-1.
+                warnings.warn('Warning! Key \'ene\' does not exist in particle raw data! Reading p1, p2, p3 and doing ene=sqrt(1+p1^2+p2^2+p3^2)-1 instead. p1, p2, p3, gamma are re-read.')
+            self._raw_ene = self.read_raw_gamma()-1.
         return self._raw_ene
+
+################################method read_raw################################
+    def read_raw(self, component):
+        '''
+        Integrated read_raw_* methods.
+        component can be 'tag', 'q', 'x1', 'x2', 'x3', 'p1', 'p2', 'p3', 'ene'.
+        '''
+        # backup component
+        component_origin = component
+        if self.code_name == 'fbpic':
+            # dictionary for transforming os like to fb like
+            os_fb_comp_dict = {'q':'w', 'x1':'z', 'x2':'x', 'x3':'y', 'p1':'uz', 'p2':'ux', 'p3':'uy'}
+            buf = opmd_read_raw(file_handle=self.fileid, species=self.spec_name, record_comp=os_fb_comp_dict[component], extensions=self.fb_extensions)
+        else:
+            # For self.code_name in {'quickpic', 'osiris', 'hipace'}
+            if self.code_name == 'quickpic':
+                os_qp_comp_dict = {'x1':'x3', 'x2':'x1', 'x3':'x2', 'p1':'p3', 'p2':'p1', 'p3':'p2'}
+                if component in os_qp_comp_dict:
+                    component = os_qp_comp_dict[component]
+                #else: For component not in os_qp_comp_dict, component remain unchanged
+            #else: For self.code_name in {'osiris', 'hipace'}, component remain unchanged
+            buf = self.fileid[component][()]
+        # save to self attributes with osiris components
+        setattr(self, '_raw_{}'.format(component_origin), buf)
+        return buf
 
 ################################method select_raw_data################################
 # Select particles according to the raw data
@@ -661,18 +722,46 @@ class OutFile:
 
 ################################method read_data################################
     def read_data(self):
-        self._data = np.zeros(self.fileid[self._data_name_in_file].shape, dtype=float_type)
-        self.fileid[self._data_name_in_file].read_direct(self._data)
-        self._axis_slices = [slice(self._axis_range[0, i], self._axis_range[1, i], self._cell_size[i]) for i in range(self._num_dimensions)]
-        if self.field_name in {'p1x1', 'p2x2', 'p3,x3'}:
-            self._axis_labels = [self._axis_labels_original[0], self._axis_labels_original[3]]
-            self._axis_units = [self._axis_units_original[0], self._axis_units_original[3]]
+        if self.code_name == 'fbpic':
+            # Read field data for the r-z code fbpic
+            # The read_data for fbpic is not well tested yet.
+            if self.out_type == 'FLD':
+                if self.field_name[1] == '1':
+                    # Directly read z component in 3D
+                    self._data, ax_info = opmd_read_field_circ(filename=self.path_filename, field_path='{}/z'.format(str.upper(self.field_name[0])), slice_across=None, slice_relative_position=None, m='all', theta=None)
+                else:
+                    # for self.field_name[1] in {'2', '3'}
+                    # ax_info is the same for the following 2 lines
+                    Fr, _ = opmd_read_field_circ(filename=self.path_filename, field_path='{}/r'.format(str.upper(self.field_name[0])), slice_across=None, slice_relative_position=None, m='all', theta=None)
+                    Ft, ax_info = opmd_read_field_circ(filename=self.path_filename, field_path='{}/t'.format(str.upper(self.field_name[0])), slice_across=None, slice_relative_position=None, m='all', theta=None)
+                    coords = {'2':'x', '3':'y'}
+                    self._data = opmd_comb_cyl(Fr=Fr, Ft=Ft, theta=None, coord=coords[self.field_name[1]], info=ax_info)
+            elif self.out_type == 'DENSITY':
+                if self.spec_name is None: field_path = 'rho'
+                else: field_path = 'rho_{}'.format(self.spec_name)
+                self._data, ax_info = opmd_read_field_circ(filename=self.path_filename, field_path=field_path, slice_across=None, slice_relative_position=None, m='all', theta=None)
+            else: raise NotImplementedError('Output type {} not implemented yet.'.format(self.out_type))
+            self._cell_size=np.array([getattr(ax_info, 'd'+ax_info.axes[i]) for i in range(len(ax_info.axes))])
+            # ax_info.axes order is ['r', 'z'] but we need ['z', 'x'] for self._axis_slices
+            self._axis_slices = [slice(getattr(ax_info, ax_info.axes[i]+'min'), getattr(ax_info, ax_info.axes[i]+'max'), self._cell_size[i]) for i in range(len(ax_info.axes)-1, -1, -1)]
+            self._axis_labels = [ax_info.axes[i] for i in range(len(ax_info.axes)-1, -1, -1)]
+            self._axis_units = [None for i in range(len(ax_info.axes))]
+            self._fig_title = ''
+            self._data_name_in_file = self.field_name
         else:
-            pass
-            # self._axis_labels and self._axis_units already set in open()
-            #self._axis_labels = [self._axis_labels_original[i] for i in range(self._num_dimensions)]
-            #self._axis_units = [self._axis_units_original[i] for i in range(self._num_dimensions)]
-        self._fig_title = 't = {0:.2f}'.format(self.time)
+            # For other codes similar to OSIRIS output format
+            self._data = np.zeros(self.fileid[self._data_name_in_file].shape, dtype=float_type)
+            self.fileid[self._data_name_in_file].read_direct(self._data)
+            self._axis_slices = [slice(self._axis_range[0, i], self._axis_range[1, i], self._cell_size[i]) for i in range(self._num_dimensions)]
+            if self.field_name in {'p1x1', 'p2x2', 'p3x3'}:
+                self._axis_labels = [self._axis_labels_original[0], self._axis_labels_original[3]]
+                self._axis_units = [self._axis_units_original[0], self._axis_units_original[3]]
+            else:
+                pass
+                # self._axis_labels and self._axis_units already set in open()
+                #self._axis_labels = [self._axis_labels_original[i] for i in range(self._num_dimensions)]
+                #self._axis_units = [self._axis_units_original[i] for i in range(self._num_dimensions)]
+            self._fig_title = 't = {0:.2f}'.format(self.time)
 
 ################################method dirs_in_AXIS_data################################
     def dirs_in_AXIS_data(self, dir):
@@ -702,12 +791,16 @@ class OutFile:
             # HiPACE h5 file has data axes [z,x,y] and AXIS group [z,x,y].
             dir_in_AXIS = dir
             dir_in_data = dir
+        elif self.code_name in {'fbpic'}:
+            # FBPIC has data axes [r, z] and AXIS sequence [r,z].
+            dir_in_AXIS = dir
+            dir_in_data = dir
         # Deprecated
         # return self._h5_AXIS_seq[dir], self._h5_data_seq[dir]
         return dir_in_AXIS, dir_in_data
 
 ################################method read_data_slice################################
-    def read_data_slice(self, dir = 2, pos = None):
+    def read_data_slice(self, dir = 2, pos = None, theta=None):
         '''dir is the direction perpendicular to the slice plane.
            dir = 0 corresponds to longidudinal direction (z).
            dir = 1 corresponds to the first transverse direction (x).
@@ -715,50 +808,82 @@ class OutFile:
            OSIRIS h5 file has data axes [y,x,z] and AXIS group [z,x,y].
            QuickPIC h5 file has data axes [z,y,x] and AXIS group [x,y,z].
            HiPACE h5 file has data axes [z,x,y] and AXIS group [z,x,y].
+           theta is the angle (in degree) of the observing plane only for fbpic. If theta is None, observing plane is determined by dir = 1 or 2.
         '''
         if 3 > self._num_dimensions:
             raise RuntimeError('Method OutFile.read_data_slice() cannot work on data with dimension number < 3!')
         if dir not in range (3):
             raise ValueError('Slice direction should be 0, 1 or 2!')
 
-        # Setting dir_in_AXIS and dir_in_data
-        dir_in_AXIS, dir_in_data = self.dirs_in_AXIS_data(dir)
-
-        # Determine the slice position
-        slice_dir_len = self.fileid[self._data_name_in_file].shape[dir_in_data]
-        if pos is None:
-            #set pos at the middle of the box
-            pos = (self._axis_range[0, dir_in_AXIS] + self._axis_range[1, dir_in_AXIS])/2.
-            pos_index = int(slice_dir_len/2.)
+        if self.code_name == 'fbpic':
+            # Read field data for the r-z code fbpic
+            if theta is None:
+                assert(dir in {1, 2})
+                theta = (2-dir)*90
+            # Transform theta to radian
+            theta = (theta%360)/180*np.pi
+            if self.out_type == 'FLD':
+                if self.field_name[1] == '1':
+                    # Directly read z component
+                    self._data, ax_info = opmd_read_field_circ(filename=self.path_filename, field_path='{}/z'.format(str.upper(self.field_name[0])), slice_across=None, slice_relative_position=None, m='all', theta=theta)
+                else:
+                    # for self.field_name[1] in {'2', '3'}
+                    # ax_info is the same for the following 2 lines
+                    Fr, ax_info = opmd_read_field_circ(filename=self.path_filename, field_path='{}/r'.format(str.upper(self.field_name[0])), slice_across=None, slice_relative_position=None, m='all', theta=theta)
+                    Ft, ax_info = opmd_read_field_circ(filename=self.path_filename, field_path='{}/t'.format(str.upper(self.field_name[0])), slice_across=None, slice_relative_position=None, m='all', theta=theta)
+                    coords = {'2':'x', '3':'y'}
+                    self._data = opmd_comb_cyl(Fr=Fr, Ft=Ft, theta=theta, coord=coords[self.field_name[1]], info=ax_info)
+            elif self.out_type == 'DENSITY':
+                if self.spec_name is None: field_path = 'rho'
+                else: field_path = 'rho_{}'.format(self.spec_name)
+                self._data, ax_info = opmd_read_field_circ(filename=self.path_filename, field_path=field_path, slice_across=None, slice_relative_position=None, m='all', theta=theta)
+            else: raise NotImplementedError('Output type {} not implemented yet.'.format(self.out_type))
+            self._cell_size=np.array([getattr(ax_info, 'd'+ax_info.axes[i]) for i in range(len(ax_info.axes))])
+            # ax_info.axes order is ['r', 'z'] but we need ['z', 'x'] for self._axis_slices
+            self._axis_slices = [slice(getattr(ax_info, ax_info.axes[i]+'min'), getattr(ax_info, ax_info.axes[i]+'max'), self._cell_size[i]) for i in range(len(ax_info.axes)-1, -1, -1)]
+            self._axis_labels = [ax_info.axes[i] for i in range(len(ax_info.axes)-1, -1, -1)]
+            self._axis_units = [None for i in range(len(ax_info.axes))]
+            self._fig_title = '$\\theta = {:2.1f}^\\circ$'.format(theta/np.pi*180)
+            self._data_name_in_file = self.field_name
         else:
-            #get the index of the nearest grid. +0.5 here has a similar effect of rounding.
-            pos_index = int((pos - self._axis_range[0, dir_in_AXIS]) / self._cell_size[dir_in_AXIS] + 0.5)
-            if slice_dir_len<=pos_index:
-                print('Warning: pos is larger than the upper bundary! Force slicing at the upper bundary.')
-                pos_index = slice_dir_len-1
-                pos = self._axis_range[1, dir_in_AXIS]
-            elif 0>pos_index:
-                print('Warning: pos is smaller than the lower bundary! Force slicing at the lower bundary.')
-                pos_index = 0
-                pos = self._axis_range[0, dir_in_AXIS]
-        # Read date matrix from h5 file
-        new_shape = [self.fileid[self._data_name_in_file].shape[i] for i in range(3) if i != dir_in_data]
-        slice_tuple = tuple([slice(None, None, None) if i != dir_in_data else pos_index for i in range(3)])
-        self._data = np.zeros(new_shape, dtype=float_type)
-        self.fileid[self._data_name_in_file].read_direct(self._data, source_sel=slice_tuple)
-        if self.code_name=='hipace' or (self.code_name=='quickpic' and dir!=0):
-            # Transpose if because the data axes order is reversed compared to OSIRIS, for all dir cases of HiPACE and dir==1, 2 cases of QuickPIC
-            self._data = np.transpose(self._data)
+            # For full 3D codes
+            # Setting dir_in_AXIS and dir_in_data
+            dir_in_AXIS, dir_in_data = self.dirs_in_AXIS_data(dir)
+            # Determine the slice position
+            slice_dir_len = self.fileid[self._data_name_in_file].shape[dir_in_data]
+            if pos is None:
+                #set pos at the middle of the box
+                pos = (self._axis_range[0, dir_in_AXIS] + self._axis_range[1, dir_in_AXIS])/2.
+                pos_index = int(slice_dir_len/2.)
+            else:
+                #get the index of the nearest grid. +0.5 here has a similar effect of rounding.
+                pos_index = int((pos - self._axis_range[0, dir_in_AXIS]) / self._cell_size[dir_in_AXIS] + 0.5)
+                if slice_dir_len<=pos_index:
+                    print('Warning: pos is larger than the upper bundary! Force slicing at the upper bundary.')
+                    pos_index = slice_dir_len-1
+                    pos = self._axis_range[1, dir_in_AXIS]
+                elif 0>pos_index:
+                    print('Warning: pos is smaller than the lower bundary! Force slicing at the lower bundary.')
+                    pos_index = 0
+                    pos = self._axis_range[0, dir_in_AXIS]
+            # Read date matrix from h5 file
+            new_shape = [self.fileid[self._data_name_in_file].shape[i] for i in range(3) if i != dir_in_data]
+            slice_tuple = tuple([slice(None, None, None) if i != dir_in_data else pos_index for i in range(3)])
+            self._data = np.zeros(new_shape, dtype=float_type)
+            self.fileid[self._data_name_in_file].read_direct(self._data, source_sel=slice_tuple)
+            if self.code_name=='hipace' or (self.code_name=='quickpic' and dir!=0):
+                # Transpose if because the data axes order is reversed compared to OSIRIS, for all dir cases of HiPACE and dir==1, 2 cases of QuickPIC
+                self._data = np.transpose(self._data)
 
-        # Determine axes perpendicular to the dir
-        self._axis_slices = [slice(self._axis_range[0, i], self._axis_range[1, i], self._cell_size[i]) for i in range(3) if i!=dir_in_AXIS]
-        if self.code_name=='quickpic' and dir!=0:
-            # Flip for QuickPIC with dir==1 or 2 because it has different order in AXIS
-            self._axis_slices = np.flip(self._axis_slices)
-        # self._axis_labels_original and self._axis_units_original are defined in thie class, independent of the code.
-        self._axis_labels = [self._axis_labels_original[i] for i in range(self._num_dimensions) if i!=dir]
-        self._axis_units = [self._axis_units_original[i] for i in range(self._num_dimensions) if i!=dir]
-        self._fig_title = 't = {0:.2f}, slice at {1} = {2}'.format(self.time, self._axis_labels_original[dir], pos)
+            # Determine axes perpendicular to the dir
+            self._axis_slices = [slice(self._axis_range[0, i], self._axis_range[1, i], self._cell_size[i]) for i in range(3) if i!=dir_in_AXIS]
+            if self.code_name=='quickpic' and dir!=0:
+                # Flip for QuickPIC with dir==1 or 2 because it has different order in AXIS
+                self._axis_slices = np.flip(self._axis_slices)
+            # self._axis_labels_original and self._axis_units_original are defined in thie class, independent of the code.
+            self._axis_labels = [self._axis_labels_original[i] for i in range(self._num_dimensions) if i!=dir]
+            self._axis_units = [self._axis_units_original[i] for i in range(self._num_dimensions) if i!=dir]
+            self._fig_title = 't = {0:.2f}, slice at {1} = {2}'.format(self.time, self._axis_labels_original[dir], pos)
 
 ################################method read_data_project################################
     def read_data_project(self, *args, **kwargs):
@@ -1035,9 +1160,9 @@ class OutFile:
         '''
         if self._data.ndim!=1:
             raise RuntimeError('Data is not one dimensional! The OutFile.plot_data_line() method cannot proceed.')
-        if h_fig is None:
-            h_fig = plt.figure()
         if h_ax is None:
+            if h_fig is None:
+                h_fig = plt.figure()
             h_ax = h_fig.add_subplot(111)
         if semilogy:
             plotfunc=h_ax.semilogy
@@ -1047,6 +1172,8 @@ class OutFile:
             x_slice = slice(self._axis_slices[0].start-self.time, self._axis_slices[0].stop-self.time, self._axis_slices[0].step)
         else:
             x_slice = self._axis_slices[0]
+        # For 2D plots, axis slices have one more grid than data. For 1D plot, we should reduce the size of axis slice.
+        #x_slice = slice(x_slice.start+x_slice.step/2, x_slice.stop-x_slice.step/2, x_slice.step)
         if if_flip_xy:
             plotfunc((self._data*multiple)+offset, np.mgrid[x_slice], **kwargs)
             set_xlabel = h_ax.set_ylabel
@@ -1079,7 +1206,7 @@ class OutFile:
         return h_fig, h_ax
 
 ################################method pcolor_data_2d################################
-    def pcolor_data_2d(self, h_fig=None, h_ax=None, if_colorbar=True, colorbar_orientation='vertical', if_log_colorbar=False, vmin=None, vmax=None, cmap=plt.cm.jet, alpha=None, if_z2zeta=False, if_transpose=None, **kwargs):
+    def pcolor_data_2d(self, h_fig=None, h_ax=None, if_colorbar=True, colorbar_orientation='vertical', if_log_colorbar=False, vmin=None, vmax=None, cmap=plt.cm.jet, if_z2zeta=False, if_transpose=None, **kwargs):
         '''Plot 2D data in as pcolor
         if_z2zeta: boolean
                    If True, offset x axis by -t (thus it is effectively zeta=z-t)
@@ -1098,17 +1225,23 @@ class OutFile:
         if if_z2zeta: z_offset = -self.time
         else: z_offset = 0.
         # For pcolormesh, the grid should be 1 cell larger than the plot data.
-        x_slice = slice(self._axis_slices[0].start+z_offset-self._axis_slices[0].step/2, self._axis_slices[0].stop+z_offset+self._axis_slices[0].step/2, self._axis_slices[0].step)
-        y_slice = slice(self._axis_slices[1].start-self._axis_slices[1].step/2, self._axis_slices[1].stop+self._axis_slices[1].step/2, self._axis_slices[1].step)
-        y_spread, x_spread = np.mgrid[y_slice, x_slice]
-        if h_fig is None:
-            h_fig = plt.figure()
+        #x_slice = slice(self._axis_slices[0].start+z_offset-self._axis_slices[0].step/2, self._axis_slices[0].stop+z_offset+self._axis_slices[0].step/2, self._axis_slices[0].step)
+        #y_slice = slice(self._axis_slices[1].start-self._axis_slices[1].step/2, self._axis_slices[1].stop+self._axis_slices[1].step/2, self._axis_slices[1].step)
+        #y_spread, x_spread = np.mgrid[y_slice, x_slice]
         if h_ax is None:
+            if h_fig is None:
+                h_fig = plt.figure()
             h_ax = h_fig.add_subplot(111)
+        if 'aspect' not in kwargs:
+            # Default aspect to 'auto', if aspect is not given.
+            kwargs['aspect']='auto'
         if if_log_colorbar:
-            h_plot = h_ax.pcolormesh(x_spread, y_spread, np.absolute(self._data), norm=LogNorm(vmin=vmin, vmax=vmax), cmap=cmap, alpha=alpha, **kwargs)
+            #h_plot = h_ax.pcolormesh(x_spread, y_spread, np.absolute(self._data), norm=LogNorm(vmin=vmin, vmax=vmax), cmap=cmap, **kwargs)
+            # Plot method changed to imshow, because pcolormesh has problem on grid numbers
+            h_plot = h_ax.imshow(np.absolute(self._data), norm=LogNorm(vmin=vmin, vmax=vmax), cmap=cmap, extent=[self._axis_slices[0].start, self._axis_slices[0].stop, self._axis_slices[1].start, self._axis_slices[1].stop], origin='lower', **kwargs)
         else:
-            h_plot = h_ax.pcolormesh(x_spread, y_spread, self._data, vmin=vmin, vmax=vmax, cmap=cmap, alpha=alpha, **kwargs)
+            #h_plot = h_ax.pcolormesh(x_spread, y_spread, self._data, vmin=vmin, vmax=vmax, cmap=cmap, **kwargs)
+            h_plot = h_ax.imshow(self._data, vmin=vmin, vmax=vmax, cmap=cmap, extent=[self._axis_slices[0].start, self._axis_slices[0].stop, self._axis_slices[1].start, self._axis_slices[1].stop], origin='lower', **kwargs)
         if self._axis_labels[0] is not None:
             xlabel = self._axis_labels[0]
             if self._axis_units[0] is not None:
@@ -1138,9 +1271,9 @@ class OutFile:
 ################################method plot_raw_hist_p1################################
     def plot_raw_hist_p1(self, h_fig=None, h_ax=None, num_bins=256, range_max=None, range_min=None):
         '''Plot histogram from p1 raw data.'''
-        if h_fig is None:
-            h_fig = plt.figure()
         if h_ax is None:
+            if h_fig is None:
+                h_fig = plt.figure()
             h_ax = h_fig.add_subplot(111)
         if range_max is None:
             range_max = self._raw_p1.max()
@@ -1224,9 +1357,9 @@ class OutFile:
 ################################method plot_raw_hist_gamma################################
     def plot_raw_hist_gamma(self, h_fig=None, h_ax=None, num_bins=256, range_max=None, range_min=None, if_select = False, **kwargs):
         '''Plot histogram from ene raw data +1 = gamma.'''
-        if h_fig is None:
-            h_fig = plt.figure()
         if h_ax is None:
+            if h_fig is None:
+                h_fig = plt.figure()
             h_ax = h_fig.add_subplot(111)
         bin_edges, hist = self.raw_hist_gamma(num_bins, range_max, range_min, if_select = if_select)
         h_ax.plot(bin_edges, hist, **kwargs)
@@ -1238,12 +1371,12 @@ class OutFile:
 ################################method plot_tracks################################
     def plot_tracks(self, h_fig=None, h_ax=None, x_quant = b'x1', y_quant = b'x2', mwin_v = 0., mwin_t_offset = 0.):
         '''Plot tracks from tracking data'''
-        if h_fig is None:
-            h_fig = plt.figure()
         if h_ax is None:
+            if h_fig is None:
+                h_fig = plt.figure()
             h_ax = h_fig.add_subplot(111)
         n_tracks = self.fileid.attrs.get("NTRACKS")[0]
-        # in OSIRIS track files, QUANTS attribute is a list of string telling which quantities are recorded in data. The 0th element in QUANTS should be ignored.
+      # in OSIRIS track files, QUANTS attribute is a list of string telling which quantities are recorded in data. The 0th element in QUANTS should be ignored.
         # the quants in OSIRIS output are bytes, thus have prefix b.
         quants = self.fileid.attrs.get("QUANTS")
         t_quant_ind = np.where(quants == b't')[0][0]-1
@@ -1295,7 +1428,11 @@ class OutFile:
                 raise NotImplementedError('direction in dims should be in (1, 2, 3)!')
             y_type_ind = type_tuple.index(y_type)
             x_type_ind = type_tuple.index(x_type)
-            label_tuple = (('$k_p z$', '$k_p x$', '$k_p y$'), ('$p_z / m_ec$', '$p_x / m_ec$', '$p_y / m_ec$'))
+            if self.code_name == 'fbpic':
+                # Space in SI units and momentum normalized to m_ec
+                label_tuple = (('$z$', '$x$', '$y$'), ('$p_z / m_ec$', '$p_x / m_ec$', '$p_y / m_ec$'))
+            else:
+                label_tuple = (('$k_p z$', '$k_p x$', '$k_p y$'), ('$p_z / m_ec$', '$p_x / m_ec$', '$p_y / m_ec$'))
             if if_reread:
                 raw_tuple = ((lambda:self.read_raw_x1(), lambda:self.read_raw_x2(), lambda:self.read_raw_x3()), (lambda:self.read_raw_p1(), lambda:self.read_raw_p2(), lambda:self.read_raw_p3()))
             else:
@@ -1312,9 +1449,7 @@ class OutFile:
             except: warnings.warn('Particle select condition is not valid! All particles are used.')
         self._data, yedges, xedges = np.histogram2d(y_array, x_array, bins=num_bins, range=range, weights=weights)
         #self._data=np.transpose(self._data)
-        half_x_step = (xedges[1]-xedges[0])/2
-        half_y_step = (yedges[1]-yedges[0])/2
-        self._axis_slices = [slice(xedges[0]+half_x_step, xedges[-1]-half_x_step, xedges[1]-xedges[0]), slice(yedges[0]+half_y_step, yedges[-1]-half_y_step, yedges[1]-yedges[0])]
+        self._axis_slices = [slice(xedges[0], xedges[-1], xedges[1]-xedges[0]), slice(yedges[0], yedges[-1], yedges[1]-yedges[0])]
         self._axis_units = [None,None]
         self._fig_title = 't = {0:.2f}, phasespace'.format(self.time)
         return
@@ -1377,9 +1512,9 @@ class OutFile:
         self._W = popt[3]*np.sqrt(2)
         self._a = popt[0]-popt[4]
         #plot contour
-        if h_fig is None:
-            h_fig = plt.figure()
         if h_ax is None:
+            if h_fig is None:
+                h_fig = plt.figure()
             h_ax = h_fig.add_subplot(111)
         self.pcolor_data_2d(h_fig, h_ax)
         h_plot = h_ax.contour(x_spread, y_spread, self._data, [popt[0]/const_e+popt[-1]], colors='w')
@@ -1403,10 +1538,10 @@ class OutFile:
         self._W = popt[1]*np.sqrt(2)
         self._a = popt[0]
         #plot contour
-        if h_fig is None:
-            h_fig = plt.figure()
         if h_ax is None:
-            h_ax = h_fig.add_subplot(111)        
+            if h_fig is None:
+                h_fig = plt.figure()
+            h_ax = h_fig.add_subplot(111)
         self.plot_data(h_fig, h_ax)
         h_plot = h_ax.plot(r_spread, tdgf.Gaussian_simple(r_spread,popt[0],popt[1]), 'r--')
         return popt, h_fig, h_ax
@@ -1872,24 +2007,26 @@ if __name__ == '__main__':
         file1.open(filename = '/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/qp_hi_compare/qp_cinj/driver.h5')
         file1.read_raw_q()
         file1.read_raw_x1()
-        file1.read_raw_p1()
         file1.read_raw_x2()
-        file1.read_raw_p2()
         file1.read_raw_x3()
-        file1.read_raw_p3()
+        #file1.read_raw_p1()
+        #file1.read_raw_p2()
+        #file1.read_raw_p3()
+        file1.read_raw_gamma()
         file1.read_raw_ene()
-        print('gamma_min = {}'.format(file1._raw_ene.min()+1.))
-        print('gamma_max = {}'.format(file1._raw_ene.max()+1.))
-        print('gamma_minux_pz_min = {}'.format(np.min(file1._raw_ene+1.-file1._raw_p1)))
+        print('gamma_min = {}'.format(file1._raw_gamma.min()))
+        print('gamma_max = {}'.format(file1._raw_gamma.max()))
+        print('gamma_minux_pz_min = {}'.format(np.min(file1._raw_gamma-file1._raw_p1)))
         #file1.select_raw_data(ene_low=2.)
         ene_avg, ene_rms_spread = file1.raw_mean_rms_ene(if_select=True)
         emittance, twiss_parameters =file1.calculate_norm_rms_emittance_um(5.0334e15, directions=(2,3), if_select=True)
         print('Q = {} pC'.format(file1.calculate_q_pC(5.0334e15, if_select=True)))
         print('E = {} +- {} MeV'.format(ene_avg*0.511, ene_rms_spread*0.511))
         print('epsilon_x_norm = {} um, epsilon_y_norm = {} um'.format(emittance[0], emittance[1]))
-        h_fig, h_ax = file1.plot_raw_hist2D(dims='p1x1', if_reread=False, if_select=True, if_log_colorbar=True, if_colorbar=True)#,range=[[19569.4, 19569.6], [5.,11.]])
+        h_fig, h_ax = file1.plot_raw_hist2D(dims='p1x1', num_bins=[128,256], if_reread=False, if_select=True, if_log_colorbar=True, if_colorbar=True)#,range=[[19569.4, 19569.6], [5.,11.]])
         print(file1._raw_x1.max())
         file1.close()
+        plt.show()
     def test_hi():
         file1 = OutFile(code_name='hipace',path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_qp_compare/hi3',field_name='raw',spec_name='trailer', use_num_list=True, out_num=584)
         file1.open()
@@ -1956,4 +2093,4 @@ if __name__ == '__main__':
         file1.plot_data()
         plt.show()
         
-    test_os_slice()
+    test_os()

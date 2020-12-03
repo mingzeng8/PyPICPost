@@ -18,6 +18,7 @@ class Frames:
             if code_name == 'osiris': frame_pref = 'os_Frames'
             elif code_name == 'hipace': frame_pref = 'hi_Frames'
             elif code_name == 'quickpic': frame_pref = 'qp_Frames'
+            elif code_name == 'fbpic': frame_pref = 'fb_Frames'
             else: raise NotImplementedError('code_name {} not implemented.'.format(code_name))
             if plot_type not in {'laser_driven', 'beam_driven'}: frame_surf = '{}_{}'.format(plot_spec_name, plot_type)
             elif dir==0: frame_surf = 'slice_x-y'
@@ -65,13 +66,15 @@ class Frames:
         # We will look up for full grid dump first.
         if self.plot_type in {'beam_driven', 'laser_driven'}:
             try:
-                # For full grid dumps
-                self.outfile = outfile.OutFile(code_name = code_name, path=simulation_path, field_name='charge', average=average, spec_name=background_spec_name, use_num_list = use_num_list, out_num=start_num)
-            except FileNotFoundError:
-                # If use_num_list is True, outfile.OutFile() will try to setup a file list while initialize. But if no suitable full grid dump file is found, we try to find the slice dumps.
+                # If use_num_list is True, outfile.OutFile() will try to setup a file list while initialize. But if slice dump is not found, we try to find full grid dump file and do slicing.
                 # For QuickPIC and OSIRIS, fields may saved as slices
                 # fld_slice in {1, 2, 3} while dir in (0, 1, 2)
                 self.outfile = outfile.OutFile(code_name = code_name, path=simulation_path, field_name='charge', average=average, spec_name=background_spec_name, use_num_list = use_num_list, out_num=start_num, fld_slice=dir+1)
+                if not os.path.isfile(self.outfile.path_filename):
+                    raise FileNotFoundError
+            except FileNotFoundError:
+                # For full grid dumps
+                self.outfile = outfile.OutFile(code_name = code_name, path=simulation_path, field_name='charge', average=average, spec_name=background_spec_name, use_num_list = use_num_list, out_num=start_num)
         else:
             self.outfile = outfile.OutFile(code_name = code_name, path=simulation_path, field_name='raw', spec_name=plot_spec_name, use_num_list = use_num_list, out_num=start_num)
 
