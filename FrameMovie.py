@@ -11,7 +11,7 @@ import matplotlib as mpl
 mpl.use('Agg')
 
 class Frames:
-    def __init__(self, code_name = 'osiris', simulation_path = None, frame_folder = None, plot_type = 'laser_driven', plot_spec_name=None, average='', use_num_list = False, start_num = 0, stride_num=1, count_num=1, laser_field_name='e3', driver_spec_name='driver', driver_vmin=None, driver_vmax=None, background_spec_name='e', background_vmin=None, background_vmax=None, trail_spec_name=None, trail_vmin=None, trail_vmax=None, if_e1=False, e1_multiple=1., if_psi=False, psi_multiple=1., if_driver_cm=False, if_trail_cm=False, dir=2, save_type='png', max_missing_file=0, plot_range=None):
+    def __init__(self, code_name = 'osiris', simulation_path = None, frame_folder = None, plot_type = 'laser_driven', plot_spec_name=None, average='', use_num_list = False, start_num = 0, stride_num=1, count_num=1, laser_field_name='e3', if_laser_profile=False, driver_spec_name='driver', driver_vmin=None, driver_vmax=None, background_spec_name='e', background_vmin=None, background_vmax=None, trail_spec_name=None, trail_vmin=None, trail_vmax=None, if_e1=False, e1_multiple=1., if_psi=False, psi_multiple=1., if_driver_cm=False, if_trail_cm=False, dir=2, project_dir=None, save_type='png', max_missing_file=0, plot_range=None):
         self.code_name = code_name
         self.simulation_path = simulation_path
         if frame_folder is None:
@@ -40,6 +40,7 @@ class Frames:
         # For phasespace plots, i.e. plot_type = 'p1x1' or so on, one has to give plot_spec_name
         self.plot_spec_name = plot_spec_name
         self.laser_field_name = laser_field_name
+        self.if_laser_profile = if_laser_profile
         self.driver_spec_name = driver_spec_name
         self.driver_vmin = driver_vmin
         self.driver_vmax = driver_vmax
@@ -58,6 +59,8 @@ class Frames:
         # if_trail_cm = True means plot the lineout of trail beam center of mass
         self.if_trail_cm = if_trail_cm
         self.dir = dir
+        # If projection direction for the phasespace plots
+        self.project_dir = project_dir
         self.save_type = save_type
         #allowed number of missing files when doing plot loop. In HiPACE sometimes there are missing output files.
         self.max_missing_file = max_missing_file
@@ -252,8 +255,7 @@ class Frames:
 
 ################################method plot_laser_driven################################
 #plot one frame for laser driven cases
-    def plot_laser_driven(self, out_num, if_laser_profile=False):
-        ''' When if_laser_profile is Ture, plot the laser profile instead of original E-field'''
+    def plot_laser_driven(self, out_num):
         h_fig = plt.figure(figsize=(6.5,5))
         self.outfile.field_name='charge'
         self.outfile.spec_name=self.background_spec_name
@@ -282,7 +284,8 @@ class Frames:
             self.outfile.open()
             if self.outfile.num_dimensions>=3: self.outfile.read_data_slice(dir=self.dir)
             else: self.outfile.read_data()
-            if if_laser_profile:
+            # When if_laser_profile is Ture, plot the laser profile instead of original E-field
+            if self.if_laser_profile:
                 self.outfile.data_profile2d()
                 self.outfile.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_lower_range_transparent(plt.cm.Reds, transparency_transition_region=[0.15,0.4]))
             else: self.outfile.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_middle_range_transparent())
@@ -347,6 +350,13 @@ class Frames:
         try:
             self.outfile.plot_raw_hist2D(h_fig, h_ax, dims=self.plot_type, cmap=my_cmap.cmap_lower_range_transparent(), if_log_colorbar=False, range=self.plot_range)
             self.outfile.close()
+            if self.project_dir is not None:
+                # project_dir == 0 or 1. For 0, flip x and y
+                self.outfile.data_project2d(dir = self.project_dir)
+                if_flip_xy=(not bool(self.project_dir))
+                get_lim = (h_ax.get_xlim, h_ax.get_ylim)
+                lim = get_lim[self.project_dir]()
+                self.outfile.plot_data(h_fig, h_ax, if_flip_xy=(not bool(self.project_dir)), multiple=(lim[1]-lim[0])/2/self.outfile.data.max(), offset=lim[0], color='k')
         except RuntimeError:
             # RuntimeError is raised if too few particle is found in the raw file.
             print('Cannot plot 2D histogram. Try next...')
@@ -358,8 +368,8 @@ class Frames:
 
 ################################method plot_save################################
 #plot one frame and save using the method either plot_save_beam_driven or plot_save_laser_driven, depends on the "plot_type" property (0 for beam driver side view, 1 for laser driver side view, 2 for phase space "p1x1" of self.trail_spec_name)
-    def plot_save(self, *args, **kwargs):
-        if 'out_num' in kwargs:
+    def plot_save(self, out_num, overwrite = False, **kwargs):
+        '''if 'out_num' in kwargs:
             out_num = kwargs['out_num']
         else:
             out_num = args[0]
@@ -367,7 +377,7 @@ class Frames:
             overwrite = kwargs['overwrite']
             kwargs.pop('overwrite')
         else:
-            overwrite = False
+            overwrite = False'''
         save_file_name = '{0}/{1}.{2}'.format(self.frame_path, out_num, self.save_type)
         if os.path.isfile(save_file_name):
             if overwrite:
@@ -377,21 +387,21 @@ class Frames:
                 return
         else:
             print('Working on number {}.'.format(out_num))
-        if 'beam_driven' == self.plot_type: h_fig = self.plot_beam_driven(*args, **kwargs)
-        elif 'laser_driven' == self.plot_type: h_fig = self.plot_laser_driven(*args, **kwargs)
-        else: h_fig = self.plot_phasespace_raw(*args, **kwargs)
+        if 'beam_driven' == self.plot_type: h_fig = self.plot_beam_driven(out_num=out_num, **kwargs)
+        elif 'laser_driven' == self.plot_type: h_fig = self.plot_laser_driven(out_num=out_num, **kwargs)
+        else: h_fig = self.plot_phasespace_raw(out_num=out_num, **kwargs)
         if h_fig is not None:
             plt.savefig(save_file_name, format=self.save_type)
             plt.close(h_fig)
 
 ################################method save_frames################################
 #save all frames
-    def save_frames(self, *args, **kwargs):
+    def save_frames(self, **kwargs):
         print('Working on simulation \'{0}\' and saving frames at \'{1}\'.'.format(self.simulation_path, self.frame_path))
         missing_file = 0
         for i in range(self.start_num, self.start_num+self.count_num*self.stride_num, self.stride_num):
             try:
-                self.plot_save(i, *args, **kwargs)
+                self.plot_save(i, **kwargs)
                 #set missing_file = 0 if success
                 missing_file = 0
             except FileNotFoundError as err:

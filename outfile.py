@@ -950,7 +950,6 @@ class OutFile:
             self._data = np.absolute(self._data)
         if if_square:
             self._data = np.square(self._data)
-        #self._data = np.sum(self._data, axis = 1-dir)/self.fileid[self._data_name_in_file].shape[1-dir]
         self._data = np.sum(self._data, axis = 1-dir)/self._data.shape[1-dir] # Need debugging
 
 ################################method data_center_of_mass2d################################
@@ -1123,7 +1122,7 @@ class OutFile:
             raise RuntimeError('Data is not one dimensional! The OutFile.profile1d() method cannot proceed.')
         self._data = np.abs(self._data)
         # Longitudinal grid points
-        lon_grid = np.mgrid[self._axis_slices[0]]
+        lon_grid = np.linspace(self._axis_slices[0].start, self._axis_slices[0].stop, self._data.shape[0])
         lon_len_minus1 = len(lon_grid)-1
         peaks_ind=find_peaks(self._data, height=0.00001*np.average(self._data))[0]
         # Adding points at the beginning and ending of the peak_ind, preparing for interpolation
@@ -1140,7 +1139,7 @@ class OutFile:
             raise RuntimeError('Data is not two dimensional! The OutFile.profile2d() method cannot proceed.')
         self._data = np.abs(self._data)
         # Longitudinal grid points
-        lon_grid = np.mgrid[self._axis_slices[dir]]
+        lon_grid = np.linspace(self._axis_slices[dir].start, self._axis_slices[dir].stop, self._data.shape[1-dir])
         lon_len_minus1 = len(lon_grid)-1
         abs_avg = np.average(self._data)
         for transverse_ind in range(self._data.shape[dir]):
@@ -1149,6 +1148,7 @@ class OutFile:
             # Adding points at the beginning and end of the peak_ind, preparing for interpolation
             if 0<peaks_ind[0]: peaks_ind=np.append(0,peaks_ind)
             if lon_len_minus1>peaks_ind[-1]: peaks_ind=np.append(peaks_ind, lon_len_minus1)
+            #print(peaks_ind.shape)
             self._data[transverse_ind] = np.interp(lon_grid, lon_grid[peaks_ind], self._data[transverse_ind, peaks_ind])
         # not yet finished. Currently this can only work with dir=0.
 
@@ -1172,16 +1172,15 @@ class OutFile:
             x_slice = slice(self._axis_slices[0].start-self.time, self._axis_slices[0].stop-self.time, self._axis_slices[0].step)
         else:
             x_slice = self._axis_slices[0]
-        # For 2D plots, axis slices have one more grid than data. For 1D plot, we should reduce the size of axis slice.
-        #x_slice = slice(x_slice.start+x_slice.step/2, x_slice.stop-x_slice.step/2, x_slice.step)
+        x_spread = np.linspace(x_slice.start, x_slice.stop, len(self._data))
         if if_flip_xy:
-            plotfunc((self._data*multiple)+offset, np.mgrid[x_slice], **kwargs)
+            plotfunc((self._data*multiple)+offset, x_spread, **kwargs)
             set_xlabel = h_ax.set_ylabel
             set_ylabel = h_ax.set_xlabel
             get_xlabel = h_ax.get_ylabel
             get_ylabel = h_ax.get_xlabel
         else:
-            plotfunc(np.mgrid[x_slice], (self._data*multiple)+offset, **kwargs)
+            plotfunc(x_spread, (self._data*multiple)+offset, **kwargs)
             set_xlabel = h_ax.set_xlabel
             set_ylabel = h_ax.set_ylabel
             get_xlabel = h_ax.get_xlabel
