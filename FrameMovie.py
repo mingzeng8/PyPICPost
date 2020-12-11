@@ -176,15 +176,11 @@ class Frames:
 
     laser_field_name = property(get_laser_field_name, set_laser_field_name)
 
-################################method plot_beam_driven################################
-#plot one frame for beam driven cases
-    def plot_beam_driven(self, out_num):
-        h_fig = plt.figure(figsize=(8,4.5))
+################################method plot_background################################
+#plot background plasma
+    def plot_background(self, h_fig, h_ax):
         self.outfile.field_name='charge'
         self.outfile.spec_name=self.background_spec_name
-        self.outfile.out_num=out_num
-        h_ax = h_fig.add_subplot(111)
-        h_ax.set_aspect('equal','box')
         self.outfile.open()
         if self.outfile.num_dimensions>=3: self.outfile.read_data_slice(dir=self.dir)
         else: self.outfile.read_data()
@@ -192,22 +188,12 @@ class Frames:
         self.outfile._color_bar.set_label('$\\rho_e$')
         self.outfile.close()
 
-        self.outfile.spec_name=self.driver_spec_name
-        self.outfile.open()
-        if self.outfile.num_dimensions>=3: self.outfile.read_data_slice(dir=self.dir)
-        else: self.outfile.read_data()
-        self.outfile.plot_data(h_fig, h_ax, vmin=self.driver_vmin, vmax=self.driver_vmax, cmap=my_cmap.cmap_higher_range_transparent(plt.cm.hot))
-        self.outfile._color_bar.set_label('$\\rho_d$')
-        if self.if_driver_cm:
-            try:
-                self.outfile.data_center_of_mass2d()
-                self.outfile.plot_data(h_fig, h_ax, c='c', ls='--')
-            # RuntimeError occurs when there is no particle
-            except RuntimeError: pass
-        self.outfile.close()
-
-        if self.trail_spec_name is not None:
-            self.outfile.spec_name=self.trail_spec_name
+################################method plot_trail################################
+#plot trailing beam
+    def plot_trail(self, h_fig, h_ax):
+        self.outfile.field_name='charge'
+        self.outfile.spec_name=self.trail_spec_name
+        try:
             self.outfile.open()
             if self.outfile.num_dimensions>=3: self.outfile.read_data_slice(dir=self.dir)
             else: self.outfile.read_data()
@@ -220,107 +206,115 @@ class Frames:
                 # RuntimeError occurs when there is no particle
                 except RuntimeError: pass
             self.outfile.close()
+        except FileNotFoundError: warnings.warn("Trailer file '{}' not found. Trailer is not ploted.".format(self.outfile.path_filename))
+        except KeyError: warnings.warn("'{}' does not contain '{}'. Trailer is not ploted.".format(self.outfile.path_filename, self.outfile.spec_name))
 
-        # Twin axis is deprecated
-        if self.if_e1:
-            self.outfile.field_name='e1'
-            self.outfile.open()
-            self.outfile.read_data_lineout()
-            self.outfile.plot_data(h_fig, h_ax, if_ylabel=False, multiple=self.e1_multiple, c='r', ls='-')
-            self.outfile.close()
+################################method plot_e1_line################################
+#plot e1 lineout
+    def plot_e1_line(self, h_fig, h_ax):
+        self.outfile.field_name='e1'
+        self.outfile.open()
+        self.outfile.read_data_lineout()
+        self.outfile.plot_data(h_fig, h_ax, if_ylabel=False, multiple=self.e1_multiple, c='r', ls='-')
+        self.outfile.close()
+        
+################################method plot_psi_line################################
+#plot psi lineout
+    def plot_psi_line(self, h_fig, h_ax):
+        self.outfile.field_name='psi'
+        self.outfile.open()
+        self.outfile.read_data_lineout()
+        self.outfile.plot_data(h_fig, h_ax, if_ylabel=False, multiple=self.psi_multiple, c='b', ls='-')
+        self.outfile.close()
 
+################################method plot_e1_psi_line################################
+#plot e1 and psi lineout
+    def plot_e1_psi_line(self, h_fig, h_ax):
+        if self.if_e1: self.plot_e1_line(h_fig, h_ax)
         if self.if_psi:
-            self.outfile.field_name='psi'
-            if not os.path.isfile(self.outfile.path_filename):
-                warnings.warn('Psi file not found. Try to get psi by integrating Ez.')
-            # No psi file, get psi by integrating e1 if e1 is already read
-                if self.if_e1:
-                    if self.code_name != 'quickpic':
-                    # For OSIRIS and HiPACE, psi is e1 integration from right to left
-                        e1 = np.flip(self.outfile._data)
-                    else: e1 = self.outfile._data
-                    np.cumsum(e1*self.outfile._axis_slices[0].step, out=self.outfile._data)
-                    if self.code_name != 'quickpic':
-                    # For OSIRIS and HiPACE, flip the data
-                        self.outfile._data = np.flip(self.outfile._data)
-                else: warnings.warn('Ez is not read. Please set if_e1 to True.')
-            else:
-            # There is psi file, read psi normally
+            try: self.plot_psi_line(h_fig, h_ax)
+            except (FileNotFoundError, KeyError):
+            # Obtain psi by integrating e1
+                if not self.if_e1:
+                    # Have not read e1, read e1 first
+                    self.outfile.field_name='e1'
+                    self.outfile.open()
+                    self.outfile.read_data_lineout()
+                    self.outfile.close()
+                e1 = self.outfile._data
+                if self.code_name != 'quickpic':
+                    # For code except quickpic, psi is e1 integration from right to left
+                    e1 = np.flip(e1)
+                np.cumsum(e1*self.outfile._axis_slices[0].step, out=self.outfile._data)
+                if self.code_name != 'quickpic':
+                    # For code except quickpic, flip the data
+                    self.outfile._data = np.flip(self.outfile._data)
+                self.outfile.plot_data(h_fig, h_ax, if_ylabel=False, multiple=self.psi_multiple, c='b', ls='-')
+
+################################method plot_beam_driven################################
+#plot one frame for beam driven cases
+    def plot_beam_driven(self, out_num, **kwargs):
+        h_fig = plt.figure(**kwargs)
+        self.outfile.out_num=out_num
+        h_ax = h_fig.add_subplot(111)
+        self.plot_background(h_fig, h_ax)
+
+        if self.driver_spec_name is not None:
+            self.outfile.field_name='charge'
+            self.outfile.spec_name=self.driver_spec_name
+            try:
                 self.outfile.open()
-                self.outfile.read_data_lineout()
+                if self.outfile.num_dimensions>=3: self.outfile.read_data_slice(dir=self.dir)
+                else: self.outfile.read_data()
+                self.outfile.plot_data(h_fig, h_ax, vmin=self.driver_vmin, vmax=self.driver_vmax, cmap=my_cmap.cmap_higher_range_transparent(plt.cm.hot))
+                self.outfile._color_bar.set_label('$\\rho_d$')
+                if self.if_driver_cm:
+                    try:
+                        self.outfile.data_center_of_mass2d()
+                        self.outfile.plot_data(h_fig, h_ax, c='c', ls='--')
+                    # RuntimeError occurs when there is no particle
+                    except RuntimeError: pass
                 self.outfile.close()
-            self.outfile.plot_data(h_fig, h_ax, if_ylabel=False, multiple=self.psi_multiple, c='b', ls='-')
+            except FileNotFoundError: warnings.warn('Driver file {} not found. Driver is not ploted.'.format(self.outfile.path_filename))
+            except KeyError: warnings.warn("'{}' does not contain '{}'. Driver is not ploted.".format(self.outfile.path_filename, self.outfile.spec_name))
+
+        if self.trail_spec_name is not None:
+            self.plot_trail(self, h_fig, h_ax)
+
+        self.plot_e1_psi_line(h_fig, h_ax)
+        h_ax.set_aspect('equal','box')
         plt.tight_layout()
         return h_fig
 
 ################################method plot_laser_driven################################
 #plot one frame for laser driven cases
-    def plot_laser_driven(self, out_num):
-        h_fig = plt.figure(figsize=(6.5,5))
-        self.outfile.field_name='charge'
-        self.outfile.spec_name=self.background_spec_name
+    def plot_laser_driven(self, out_num, **kwargs):
+        h_fig = plt.figure(**kwargs)
         self.outfile.out_num=out_num
         h_ax = h_fig.add_subplot(111)
-        #h_ax.set_aspect('equal', 'box')
-        #plt.ylim(-10,10)
-        self.outfile.open()
-        if self.outfile.num_dimensions>=3: self.outfile.read_data_slice(dir=self.dir)
-        else: self.outfile.read_data()
-        self.outfile.plot_data(h_fig, h_ax, cmap='gray', vmax=self.background_vmax, vmin=self.background_vmin)
-        self.outfile._color_bar.set_label('$\\rho_e$')
-        self.outfile.close()
-
-        if self.trail_spec_name is not None:
-            self.outfile.spec_name=self.trail_spec_name
-            self.outfile.open()
-            if self.outfile.num_dimensions>=3: self.outfile.read_data_slice(dir=self.dir)
-            else: self.outfile.read_data()
-            self.outfile.plot_data(h_fig, h_ax, vmin=self.trail_vmin, vmax=self.trail_vmax, cmap=my_cmap.cmap_higher_range_transparent())
-            self.outfile._color_bar.set_label('$\\rho_t$')
-            self.outfile.close()
+        self.plot_background(h_fig, h_ax)
 
         if self.laser_field_name is not None:
             self.outfile.field_name=self.laser_field_name
-            self.outfile.open()
-            if self.outfile.num_dimensions>=3: self.outfile.read_data_slice(dir=self.dir)
-            else: self.outfile.read_data()
-            # When if_laser_profile is Ture, plot the laser profile instead of original E-field
-            if self.if_laser_profile:
-                self.outfile.data_profile2d()
-                self.outfile.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_lower_range_transparent(plt.cm.Reds, transparency_transition_region=[0.15,0.4]))
-            else: self.outfile.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_middle_range_transparent())
-            self.outfile._color_bar.set_label('$E_L$')
-            self.outfile.close()
-
-        if self.if_e1:
-            self.outfile.field_name='e1'
-            self.outfile.open()
-            self.outfile.read_data_lineout()
-            self.outfile.plot_data(h_fig, h_ax, if_ylabel=False, multiple=self.e1_multiple, c='r', ls='-')
-            self.outfile.close()
-
-        if self.if_psi:
-            self.outfile.field_name='psi'
-            if not os.path.isfile(self.outfile.path_filename):
-                warnings.warn('Psi file not found. Try to get psi by integrating Ez.')
-            # No psi file, get psi by integrating e1 if e1 is already read
-                if self.if_e1:
-                    if self.code_name != 'quickpic':
-                    # For OSIRIS and HiPACE, psi is e1 integration from right to left
-                        e1 = np.flip(self.outfile._data)
-                    else: e1 = self.outfile._data
-                    np.cumsum(e1*self.outfile._axis_slices[0].step, out=self.outfile._data)
-                    if self.code_name != 'quickpic':
-                    # For OSIRIS and HiPACE, flip the data
-                        self.outfile._data = np.flip(self.outfile._data)
-                else: warnings.warn('Ez is not read. Please set if_e1 to True.')
-            else:
-            # There is psi file, read psi normally
+            try:
                 self.outfile.open()
-                self.outfile.read_data_lineout()
+                if self.outfile.num_dimensions>=3: self.outfile.read_data_slice(dir=self.dir)
+                else: self.outfile.read_data()
+                # When if_laser_profile is Ture, plot the laser profile instead of original E-field
+                if self.if_laser_profile:
+                    self.outfile.data_profile2d()
+                    self.outfile.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_lower_range_transparent(plt.cm.Reds, transparency_transition_region=[0.15,0.4]))
+                else: self.outfile.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_middle_range_transparent())
+                self.outfile._color_bar.set_label('$E_L$')
                 self.outfile.close()
-            self.outfile.plot_data(h_fig, h_ax, if_ylabel=False, multiple=self.psi_multiple, c='b', ls='-')
+            except FileNotFoundError: warnings.warn('Laser file {} not found. Laser is not ploted.'.format(self.outfile.path_filename))
+            except KeyError: warnings.warn("'{}' does not contain '{}'. Trailer is not ploted.".format(self.outfile.path_filename, self.field_name))
 
+        if self.trail_spec_name is not None:
+            self.plot_trail(h_fig, h_ax)
+
+        self.plot_e1_psi_line(h_fig, h_ax)
+        h_ax.set_aspect('equal', 'box')
         plt.tight_layout()
         return h_fig
 
