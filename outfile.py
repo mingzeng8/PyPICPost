@@ -593,9 +593,9 @@ class OutFile:
 # please call read_raw_q() before this function
 # if_select = False: use all the macro particles
 # if_select = True: only use the macro particles with index in self._raw_select_index
-    def calculate_q_pC(self, n0_per_cc, if_select = False):
+    def calculate_q_pC(self, n0_per_cc = None, if_select = False):
         '''
-        n0_per_cc: reference density in simulation, in unit of per centimeter cube
+        n0_per_cc: reference density in simulation, in unit of per centimeter cube. This is not required for FBPIC.
         when if_select = True, only calculate the selected macro particles according to self._raw_select_index.
         The formula for charge in pC: Q[pC] = sum_q*n0*V_cell_norm*k0**-3*e_charge*10**12
         and k0=(4*pi*r_e*n0)**0.5, where r_e is classical electron radius.
@@ -613,30 +613,33 @@ class OutFile:
                     return 0.0
                 q_array = q_array[self._raw_select_index]
             except: warnings.warn('Particle select condition is not valid! All particles are used.')
-        #normalized cell volume
-        cell_volume_norm = 1.0
-        for i in range(self.num_dimensions):
-            cell_volume_norm = cell_volume_norm*self._cell_size[i]
-        if 3>self.num_dimensions:
-            print('Warning! Similation is in {} dimensional. Charge calculation may not be correct.'.format(self.num_dimensions))
-        return np.sum(q_array)*cell_volume_norm/np.sqrt(n0_per_cc)*24043512116.12064
+        if self.code_name == 'fbpic':
+            # For FBPIC, self._raw_q is the number of actual particles
+            return np.sum(q_array)*e_charge*1e12
+        else:
+            assert isinstance(n0_per_cc, float), "n0_per_cc should be a float!"
+            #normalized cell volume
+            cell_volume_norm = 1.0
+            for i in range(self.num_dimensions):
+                cell_volume_norm = cell_volume_norm*self._cell_size[i]
+            if 3>self.num_dimensions:
+                print('Warning! Similation is in {} dimensional. Charge calculation may not be correct.'.format(self.num_dimensions))
+            return np.sum(q_array)*cell_volume_norm/np.sqrt(n0_per_cc)*24043512116.12064
 
 ################################method calculate_norm_rms_emittance_um################################
 # calculate the normalized rms emittance in unit of micrometer radian
 # please call read_raw_x2(), read_raw_p2() and/or read_raw_x3(), read_raw_p3()
 # and/or read_raw_x1(), read_raw_p1()
 # and read_raw_q() before this function
-    def calculate_norm_rms_emittance_um(self, n0_per_cc, directions=(2,), if_select = False):
+    def calculate_norm_rms_emittance_um(self, n0_per_cc=None, directions=(2,), if_select = False):
         '''
-        n0_per_cc: reference density in simulation, in unit of per centimeter cube
+        n0_per_cc: reference density in simulation, in unit of per centimeter cube. This is not required for FBPIC.
         one_over_k0_um: one over k0, in unit of micrometer
         one_over_k0_um = (4pi*r_e_in_um*n0_per_cc*10^-12)^-0.5 = (3.541e-20*n0_per_cc)^-0.5
         when if_select = True, only calculate the selected macro particles according to self._raw_select_index.
         return: 2 elements. The first is normalized emittance list in each of the given directions. The second is a list of 3 elements: the 3 Courant-Snyder parameters in each of the given directions.
         return all 0 if no particle is selected.
         '''
-        one_over_k0_um_square = 2.8239587227915743e19/n0_per_cc
-        one_over_k0_mm = np.sqrt(one_over_k0_um_square)/1.e3
         norm_emittances=np.zeros(len(directions))
 
         # Courant-Snyder parameters
@@ -677,7 +680,11 @@ class OutFile:
             # The geometric emittance calculation refer to
             # http://nicadd.niu.edu/~syphers/uspas/2018w/some-notes-on-ellipses.html
             # unnormalize x to mm
-            x=x*one_over_k0_mm
+            if self.code_name == 'fbpic': x*=1e3 # For FBPIC, x is in meters
+            else:
+                one_over_k0_um_square = 2.8239587227915743e19/n0_per_cc
+                one_over_k0_mm = np.sqrt(one_over_k0_um_square)/1.e3
+                x=x*one_over_k0_mm
             # calculate x prime in mrad
             y=p/p1_array*1.e3
             s11=np.sum(np.multiply(np.square(x), weights))/sum_weight
@@ -746,7 +753,7 @@ class OutFile:
             self._axis_slices = [slice(getattr(ax_info, ax_info.axes[i]+'min'), getattr(ax_info, ax_info.axes[i]+'max'), self._cell_size[i]) for i in range(len(ax_info.axes)-1, -1, -1)]
             self._axis_labels = [ax_info.axes[i] for i in range(len(ax_info.axes)-1, -1, -1)]
             self._axis_units = [None for i in range(len(ax_info.axes))]
-            self._fig_title = ''
+            self._fig_title = 't = {:.2e}'.format(self.time)
             self._data_name_in_file = self.field_name
         else:
             # For other codes similar to OSIRIS output format
@@ -843,7 +850,7 @@ class OutFile:
             self._axis_slices = [slice(getattr(ax_info, ax_info.axes[i]+'min'), getattr(ax_info, ax_info.axes[i]+'max'), self._cell_size[i]) for i in range(len(ax_info.axes)-1, -1, -1)]
             self._axis_labels = [ax_info.axes[i] for i in range(len(ax_info.axes)-1, -1, -1)]
             self._axis_units = [None for i in range(len(ax_info.axes))]
-            self._fig_title = '$\\theta = {:2.1f}^\\circ$'.format(theta/np.pi*180)
+            self._fig_title = '$t = {:.2e}, \\theta = {:2.1f}^\\circ$'.format(self.time, theta/np.pi*180)
             self._data_name_in_file = self.field_name
         else:
             # For full 3D codes
@@ -1450,7 +1457,8 @@ class OutFile:
         #self._data=np.transpose(self._data)
         self._axis_slices = [slice(xedges[0], xedges[-1], xedges[1]-xedges[0]), slice(yedges[0], yedges[-1], yedges[1]-yedges[0])]
         self._axis_units = [None,None]
-        self._fig_title = 't = {0:.2f}, phasespace'.format(self.time)
+        if self.code_name == 'fbpic': self._fig_title = 't = {0:.2e}'.format(self.time)
+        else: self._fig_title = 't = {0:.2f}'.format(self.time)
         return
 
 ################################method plot_raw_hist2D################################
