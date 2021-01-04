@@ -342,7 +342,7 @@ class Frames:
         h_ax = h_fig.add_subplot(111)
         self.outfile.open()
         try:
-            self.outfile.plot_raw_hist2D(h_fig, h_ax, dims=self.plot_type, cmap=my_cmap.cmap_lower_range_transparent(), if_log_colorbar=False, range=self.plot_range)
+            self.outfile.plot_raw_hist2D(h_fig, h_ax, dims=self.plot_type, cmap=my_cmap.cmap_lower_range_transparent(), if_log_colorbar=False, select_range=self.plot_range)
             self.outfile.close()
             if self.project_dir is not None:
                 # project_dir == 0 or 1. For 0, flip x and y
@@ -355,6 +355,7 @@ class Frames:
             # RuntimeError is raised if too few particle is found in the raw file.
             print('Cannot plot 2D histogram. Try next...')
             self.outfile.close()
+            plt.close(h_fig)
             return None
         self.outfile.close()
         plt.tight_layout()

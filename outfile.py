@@ -511,6 +511,7 @@ class OutFile:
 
 ################################method select_raw_data################################
 # Select particles according to the raw data
+# condition_dict is a dictionary of select conditions which can have:
 # x1_low, x1_up: lower and upper limits of x1.
 # ...
 # r_low, r_up: lower and upper limits of radius of position, i.e. sqrt(x2^2+x3^2).
@@ -1411,7 +1412,7 @@ class OutFile:
         return h_fig, h_ax
 
 ################################method raw_hist2D################################
-    def raw_hist2D(self, dims=None, x_array=None, y_array=None, x_label=None, y_label=None, num_bins=128, range=None, if_reread =True, if_select = False):
+    def raw_hist2D(self, dims=None, x_array=None, y_array=None, x_label=None, y_label=None, num_bins=128, select_range=None, if_reread =True):
         '''Generate 2D histogram for phasespace from raw data.
            If if_reread is true, the raw data is read in this function and one does not have to read raw data before calling this. Otherwise one has to make sure thre required raw data is already read.
            dims can be combinations of 'x1', 'x2', 'x3', 'p1', 'p2', 'p3'.
@@ -1447,13 +1448,21 @@ class OutFile:
             y_array = raw_tuple[y_type_ind][y_dir]()
             x_array = raw_tuple[x_type_ind][x_dir]()
             self._axis_labels = [label_tuple[x_type_ind][x_dir], label_tuple[y_type_ind][y_dir]]
-        if if_select:
-            try:
+            if select_range is not None:
+                # Set select condition
+                low_or_up = ['low', 'up']
+                condition_dict = {}
+                for i in range(2):
+                    for j in range(2):
+                        if select_range[i][j] is not None:
+                            condition_dict[dims[2*i:2*i+2]+'_'+low_or_up[j]] = select_range[i][j]
+                self.select_raw_data(**condition_dict)
+                if len(self._raw_select_index) < 2:
+                    raise RuntimeError("No or too few particle is selected! Check select_range.")
                 weights = weights[self._raw_select_index]
                 x_array = x_array[self._raw_select_index]
                 y_array = y_array[self._raw_select_index]
-            except: warnings.warn('Particle select condition is not valid! All particles are used.')
-        self._data, yedges, xedges = np.histogram2d(y_array, x_array, bins=num_bins, range=range, weights=weights)
+        self._data, yedges, xedges = np.histogram2d(y_array, x_array, bins=num_bins, weights=weights)
         #self._data=np.transpose(self._data)
         self._axis_slices = [slice(xedges[0], xedges[-1], xedges[1]-xedges[0]), slice(yedges[0], yedges[-1], yedges[1]-yedges[0])]
         self._axis_units = [None,None]
@@ -1462,11 +1471,11 @@ class OutFile:
         return
 
 ################################method plot_raw_hist2D################################
-    def plot_raw_hist2D(self, h_fig=None, h_ax=None, dims=None, x_array=None, y_array=None, x_label=None, y_label=None, num_bins=128, range=None, if_reread =True, if_select = False, **kwargs):
+    def plot_raw_hist2D(self, h_fig=None, h_ax=None, dims=None, x_array=None, y_array=None, x_label=None, y_label=None, num_bins=128, select_range=None, if_reread =True, **kwargs):
         '''Plot 2D histogram for phasespace from raw data.
            Please make sure the corresponding raw data is read before calling this.
            dims can be combinations of 'x1', 'x2', 'x3', 'p1', 'p2', 'p3'.'''
-        self.raw_hist2D(dims=dims, x_array=x_array, y_array=y_array, x_label=x_label, y_label=y_label, num_bins=num_bins, range=range, if_reread=if_reread, if_select=if_select)
+        self.raw_hist2D(dims=dims, x_array=x_array, y_array=y_array, x_label=x_label, y_label=y_label, num_bins=num_bins, select_range=select_range, if_reread=if_reread)
         h_fig, h_ax = self.plot_data(h_fig, h_ax, **kwargs)
         return h_fig, h_ax
 
