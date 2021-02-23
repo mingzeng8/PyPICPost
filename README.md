@@ -13,4 +13,5 @@ or on a computer without root access:
   pip install --user parse
 
 openpmd-viewer, for code_name being 'fbpic'. To install with anaconda:
-  conda install -c conda-forge openpmd-viewer
+  conda install -c conda-forge openpmd-viewer=1.0.0
+Note: newer version of openpmd-viewer uses different interfaces and is not supported by the current version of PyPICPost.
