@@ -960,6 +960,33 @@ class OutFile:
             self._data = np.square(self._data)
         self._data = np.sum(self._data, axis = 1-dir)/self._data.shape[1-dir] # Need debugging
 
+################################method data_lineout2d################################
+    def data_lineout2d(self, dir = 0, pos = None):
+        ''' Perform lineout on 2D self._data.
+            This is necessary if it is not easy to use read_data_lineout(), e.g. for FBPIC.
+        '''
+        if 2 != self._data.ndim: raise RuntimeError('Data not 2 dimensional! Exit.')
+        if dir not in range (2):
+            raise ValueError('Direction should be 0 or 1!')
+        data_shape = self._data.shape
+        if pos is None:
+            # Lineout position set to the center of box if pos is None
+            pos_index = data_shape[dir]//2
+        else:
+            #get the index of the nearest grid. +0.5 here has a similar effect of rounding.
+            pos_index = int((pos - self._axis_slices[1-dir].start)/(self._axis_slices[1-dir].stop - self._axis_slices[1-dir].start)*data_shape[dir] + 0.5)
+        if data_shape[dir] <= pos_index:
+            print('Warning: pos is larger than the upper bundary! Force lineout at the upper bundary.')
+            pos_index = data_shape[dir]-1
+        elif 0>pos_index:
+            print('Warning: pos is smaller than the lower bundary! Force lineout at the lower bundary.')
+            pos_index = 0
+        if dir == 0: self._data = self._data[pos_index, :]
+        else: self._data = self._data[:, pos_index]
+        self._axis_slices = [self._axis_slices[dir]]
+        self._axis_labels = [self._axis_labels_original[dir], None]
+        self._axis_units = [self._axis_units_original[dir], None]
+
 ################################method data_center_of_mass2d################################
     def data_center_of_mass2d(self, dir = 0, if_abs = True, if_square = False, weigh_threshold=0.):
         '''
@@ -2100,13 +2127,12 @@ if __name__ == '__main__':
         file1.close()
         plt.show()
 
-    def test_os_slice():
-        dir=2
-        file1 = OutFile(path='/home/ming/mnt/BSCC_HOME/jobs/os_DCLBII/1',field_name='e3',spec_name='neutral_1',out_num=50, fld_slice=3)
-        print(file1.path_filename)
+    def test_fb_lineout():
+        file1 = OutFile(code_name = 'fbpic', path='/home/wangjia/project/FB/DCI/diag_k=79_a0=3.6_w0=3.8_dphase=1.6', field_name='e2', use_num_list=True, out_num=10)
         file1.open()
-        file1.read_data()
+        file1.read_data_slice()
+        file1.data_lineout2d(dir = 0, pos = None)
         file1.plot_data()
         plt.show()
         
-    test_os()
+    test_fb_lineout()
