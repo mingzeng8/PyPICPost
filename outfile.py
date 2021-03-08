@@ -39,11 +39,10 @@ class OutFile:
         self.cyl_m_re_im = cyl_m_re_im
 
         #self._num_dimensions = 0
-        ''' This is moved to self.set_code_name() so that self._axis_labels_original is modified every time code name is changed.
+        ''' This is moved to self.set_code_name() so that self._axis_labels_original and self._axis_units_original are modified every time code name is changed.
         if self.code_name in {'quickpic', 'hipace'}: self._axis_labels_original = ('$\\xi$', 'x', 'y', '$p_z$', '$p_x$', '$p_y$')
-        else: self._axis_labels_original = ('z', 'x', 'y', '$p_z$', '$p_x$', '$p_y$')'''
-        self._axis_units_original = ('$c / \\omega_p$',)*3 + ('$m_ec$',)*3
-        #self._axis_units_original = ('$k_p^{-1}$',)*3 + ('$m_ec$',)*3
+        else: self._axis_labels_original = ('z', 'x', 'y', '$p_z$', '$p_x$', '$p_y$')
+        self._axis_units_original = ('$c / \\omega_p$',)*3 + ('$m_ec$',)*3'''
         self._field_names = {'psi':'$\psi$', 'e1':'$E_z$', 'e2':'$E_x$', 'e3':'$E_y$', 'e3_cyl_m':'$E_y$', 'b1':'$B_z$', 'b2':'$B_x$', 'b3':'$B_y$', 'j1':'$J_z$', 'ene':'$E_k / n_p m_e c^2$', 'charge':'$\\rho$', 'ion_charge':'$\\rho$', 'p1x1':'$p_1x_1$ [arb. units]', 'p2x2':'$p_2x_2$ [arb. units]', 'beam_charge':'$\\rho_b$', 'plasma_charge':'$\\rho_e$', 'ExmBy':'$E_x-B_y$', 'Ez':'$E_z$', 'EypBx':'$E_y+B_x$'\
         # Some field naming problem in new HiPACE
         , 'plasma_electrons': '$\\rho_e$', 'driver': '$\\rho_d$', 'drive_beam': '$\\rho_d$', 'trailer': '$\\rho_t$'\
@@ -63,9 +62,21 @@ class OutFile:
         if value not in self._accepted_code_name:
             raise ValueError('code_name \'{0}\' not implemented!'.format(value))
         self._code_name = value
-        if value=='quickpic': self._axis_labels_original = ('$\\xi$', 'x', 'y', '$p_z$', '$p_x$', '$p_y$')
-        elif value=='hipace': self._axis_labels_original = ('$\\zeta$', 'x', 'y', '$p_z$', '$p_x$', '$p_y$')
-        else: self._axis_labels_original = ('z', 'x', 'y', '$p_z$', '$p_x$', '$p_y$')
+        if value=='quickpic':
+            self._axis_labels_original = ('$\\xi$', '$x$', '$y$', '$p_z$', '$p_x$', '$p_y$')
+            self._axis_units_original = ('$c / \\omega_p$',)*3 + ('$m_ec$',)*3
+            self._dict_units = {} # add more when necessary
+        elif value=='hipace':
+            self._axis_labels_original = ('$\\zeta$', '$x$', '$y$', '$p_z$', '$p_x$', '$p_y$')
+            self._axis_units_original = ('$c / \\omega_p$',)*3 + ('$m_ec$',)*3
+            self._dict_units = {} # add more when necessary
+        elif value=='fbpic':
+            self._dict_units = {'e1':'V', 'e2':'V', 'e3':'V'} # add more when necessary
+        else:
+            # default, OSIRIS
+            self._axis_labels_original = ('z', 'x', 'y', '$p_z$', '$p_x$', '$p_y$')
+            self._axis_units_original = ('$c / \\omega_p$',)*3 + ('$m_ec$',)*3
+            self._dict_units = {} # add more when necessary
         if self.code_name in {'quickpic', 'fbpic'}: self.digit_num = 8
         else: self.digit_num = 6
         if self.code_name in {'hipace', 'quickpic', 'fbpic'}: self._num_dimensions = 3
@@ -847,10 +858,11 @@ class OutFile:
                 self._data, ax_info = opmd_read_field_circ(filename=self.path_filename, field_path=field_path, slice_across=None, slice_relative_position=None, m='all', theta=theta)
             else: raise NotImplementedError('Output type {} not implemented yet.'.format(self.out_type))
             self._cell_size=np.array([getattr(ax_info, 'd'+ax_info.axes[i]) for i in range(len(ax_info.axes))])
-            # ax_info.axes order is ['r', 'z'] but we need ['z', 'x'] for self._axis_slices
+            # ax_info.axes order is ['r', 'z'] but we need ['z', 'r'] for self._axis_slices
             self._axis_slices = [slice(getattr(ax_info, ax_info.axes[i]+'min'), getattr(ax_info, ax_info.axes[i]+'max'), self._cell_size[i]) for i in range(len(ax_info.axes)-1, -1, -1)]
-            self._axis_labels = [ax_info.axes[i] for i in range(len(ax_info.axes)-1, -1, -1)]
-            self._axis_units = [None for i in range(len(ax_info.axes))]
+            # Cannot replace 'r' by 'x' because theta can be any value. Only theta==0 can 'r' be replaced by 'x'.
+            self._axis_labels = ['${}$'.format(ax_info.axes[i]) for i in range(len(ax_info.axes)-1, -1, -1)]
+            self._axis_units = ['m',]*2
             self._fig_title = '$t = {:.2e}, \\theta = {:2.1f}^\\circ$'.format(self.time, theta/np.pi*180)
             self._data_name_in_file = self.field_name
         else:
@@ -984,8 +996,8 @@ class OutFile:
         if dir == 0: self._data = self._data[pos_index, :]
         else: self._data = self._data[:, pos_index]
         self._axis_slices = [self._axis_slices[dir]]
-        self._axis_labels = [self._axis_labels_original[dir], None]
-        self._axis_units = [self._axis_units_original[dir], None]
+        self._axis_labels = [self._axis_labels[dir], self._field_names[self._data_name_in_file]]
+        self._axis_units = [self._axis_units[dir], self._dict_units[self._data_name_in_file]]
 
 ################################method data_center_of_mass2d################################
     def data_center_of_mass2d(self, dir = 0, if_abs = True, if_square = False, weigh_threshold=0.):
@@ -1288,7 +1300,10 @@ class OutFile:
             h_ax.set_ylabel(ylabel)
         if if_colorbar:
             self._color_bar = plt.colorbar(h_plot, ax=h_ax, orientation=colorbar_orientation)
-            try: self._color_bar.set_label(self._field_names[self._data_name_in_file])
+            try:
+                vlabel = self._field_names[self._data_name_in_file]
+                if self._data_name_in_file in self._dict_units: vlabel += ' [{}]'.format(self._dict_units[self._data_name_in_file])
+                self._color_bar.set_label(vlabel)
             except:
                 #print(self._data_name_in_file)
                 self._color_bar.set_label('Counts [arb. units]')
@@ -2128,9 +2143,10 @@ if __name__ == '__main__':
         plt.show()
 
     def test_fb_lineout():
-        file1 = OutFile(code_name = 'fbpic', path='/home/wangjia/project/FB/DCI/diag_k=79_a0=3.6_w0=3.8_dphase=1.6', field_name='e2', use_num_list=True, out_num=10)
+        file1 = OutFile(code_name = 'fbpic', path='/home/ming/mnt/CNG12/FB/DCI/diag_k=79_a0=3.6_w0=3.8_dphase=0.0', field_name='e2', use_num_list=True, out_num=0)
         file1.open()
         file1.read_data_slice()
+        file1.plot_data()
         file1.data_lineout2d(dir = 0, pos = None)
         file1.plot_data()
         plt.show()
