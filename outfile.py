@@ -71,6 +71,8 @@ class OutFile:
             self._axis_units_original = ('$c / \\omega_p$',)*3 + ('$m_ec$',)*3
             self._dict_units = {} # add more when necessary
         elif value=='fbpic':
+            self._axis_labels_original = ('$z$', '$x$', '$y$', '$p_z$', '$p_x$', '$p_y$')
+            self._axis_units_original = ('m',)*3 + ('$m_ec$',)*3
             self._dict_units = {'e1':'V', 'e2':'V', 'e3':'V'} # add more when necessary
         else:
             # default, OSIRIS
@@ -963,8 +965,8 @@ class OutFile:
         if dir not in range (2):
             raise ValueError('Project direction should be 0 or 1!')
         self._axis_slices = [self._axis_slices[1-dir]]
-        self._axis_labels = [self._axis_labels_original[1-dir], None]
-        self._axis_units = [self._axis_units_original[1-dir], None]
+        self._axis_labels = [self._axis_labels[1-dir], None]
+        self._axis_units = [self._axis_units[1-dir], None]
         self._fig_title = 't = {0:.2f}, {1}{2}projection'.format(self.time, 'absolute value ' if if_abs else '', 'squared ' if if_square else '')
         if if_abs:
             self._data = np.absolute(self._data)
@@ -1477,11 +1479,7 @@ class OutFile:
                 raise NotImplementedError('direction in dims should be in (1, 2, 3)!')
             y_type_ind = type_tuple.index(y_type)
             x_type_ind = type_tuple.index(x_type)
-            if self.code_name == 'fbpic':
-                # Space in SI units and momentum normalized to m_ec
-                label_tuple = (('$z$', '$x$', '$y$'), ('$p_z / m_ec$', '$p_x / m_ec$', '$p_y / m_ec$'))
-            else:
-                label_tuple = (('$k_p z$', '$k_p x$', '$k_p y$'), ('$p_z / m_ec$', '$p_x / m_ec$', '$p_y / m_ec$'))
+            label_list = ['{} [{}]'.format(self._axis_labels_original[i], self._axis_units_original[i]) for i in range(len(self._axis_labels_original))]
             if if_reread:
                 raw_tuple = ((lambda:self.read_raw_x1(), lambda:self.read_raw_x2(), lambda:self.read_raw_x3()), (lambda:self.read_raw_p1(), lambda:self.read_raw_p2(), lambda:self.read_raw_p3()))
             else:
@@ -1489,7 +1487,7 @@ class OutFile:
             # The data is not actually read before calling the function handles
             y_array = raw_tuple[y_type_ind][y_dir]()
             x_array = raw_tuple[x_type_ind][x_dir]()
-            self._axis_labels = [label_tuple[x_type_ind][x_dir], label_tuple[y_type_ind][y_dir]]
+            self._axis_labels = [label_list[x_type_ind*3+x_dir], label_list[y_type_ind*3+y_dir]]
             if select_range is not None:
                 # Set select condition
                 low_or_up = ['low', 'up']
