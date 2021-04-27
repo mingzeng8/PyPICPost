@@ -1,3 +1,6 @@
+from outfile import OutFile
+import numpy as np
+import matplotlib.pyplot as plt
 # Examples and tests
 if __name__ == '__main__':
     out_num=1
@@ -483,7 +486,7 @@ if __name__ == '__main__':
 
     def test_fb_lineout():
         from scipy.fft import fft, ifft
-        file1 = OutFile(code_name = 'fbpic', path='/home/ming/mnt/CNG12/FB/DCII/diag_k=79_a0=3.3_w0=3.7_dphase=0.0_2mmdope', field_name='e2', use_num_list=True, out_num=0)
+        file1 = OutFile(code_name = 'fbpic', path='/project/zengming/FB/PTE_k28/diag_k=28_a0=15.7_w0=2.4_d=56', field_name='e2', use_num_list=True, out_num=80)
         file1.open()
         file1.read_data_slice()
         #file1.plot_data()
@@ -505,10 +508,34 @@ if __name__ == '__main__':
         file1.plot_data(h_fig=h_f, h_ax=h_ax, c='r')
         file1._data = ifft(f2)
         file1.plot_data(h_fig=h_f, h_ax=h_ax, c='b')
-        file1.spec_name = 'Ne_e'
+        #file1.spec_name = 'Ne_e'
+        #file1.read_raw('q')
+        #print('Ne_e Q = {} pC'.format(file1.calculate_q_pC(if_select = True)))
+        file1.spec_name = 'e'
         file1.read_raw('q')
-        print('Q = {} pC'.format(file1.calculate_q_pC()))
+        file1.read_raw('p1')        
+        file1.select_raw_data(p1_low=4000.)
+        print('e Q = {} pC'.format(file1.calculate_q_pC(if_select = True)))
         file1.close()
         plt.show()
         
-    test_fb_lineout()
+    def fb_spectrum():
+        file1 = OutFile(code_name = 'fbpic', path='/project/zengming/FB/PTE_k28/diag_k=28_a0=15.7_w0=2.4_d=56', field_name='raw', spec_name = 'e', use_num_list=True, out_num=80)
+        file1.open()
+        file1.read_raw('q')
+        file1.read_raw_gamma()
+        file1.close()
+        bin_edges, hist = file1.raw_hist_gamma(num_bins=1200, range_max=5200., range_min=4000.)
+        plt.plot(bin_edges, hist, 'k-', label='$d=56$')
+        file1.path='/project/zengming/FB/PTE_k28/diag_k=28_a0=15.7_w0=2.4_d=0'
+        file1.open()
+        file1.read_raw('q')
+        file1.read_raw_gamma()
+        file1.close()
+        bin_edges, hist = file1.raw_hist_gamma(num_bins=1200, range_max=5200., range_min=4000.)
+        plt.plot(bin_edges, hist, 'r-', label='$d=0$')
+        plt.xlabel('$\\gamma$')
+        plt.ylabel('$dq/d\\gamma$ [C]')
+        plt.show()
+
+    fb_spectrum()

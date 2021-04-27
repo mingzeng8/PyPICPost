@@ -15,7 +15,7 @@ def get_field_peak(outfile_object, if_abs=True):
     else:
         return np.max(outfile_object._data)
 
-def plot_field_peak_vs_t(path, code_name='osiris', field_name='e3', if_abs=False, use_num_list=False, start=0, count=0, stride=1, t_offset = 0., h_ax=None, field_abs=True, linestyle='-'):
+def plot_field_peak_vs_t(path, code_name='osiris', field_name='e3', if_abs=False, use_num_list=False, start=0, count=0, stride=1, t_offset = 0., h_ax=None, field_abs=True, **kwargs):
     '''
     
     '''
@@ -35,12 +35,26 @@ def plot_field_peak_vs_t(path, code_name='osiris', field_name='e3', if_abs=False
         t_array.append(outfile_object.time+t_offset)
         peak_array.append(peak)
     if h_ax is None: _, h_ax =  plt.subplots()
-    h_ax.plot(t_array, peak_array, color='k', linestyle = linestyle)
+    h_ax.plot(t_array, peak_array, **kwargs)
     plt.xlabel('$t$')
     plt.minorticks_on()
     return h_ax
 
 if __name__ == '__main__':
-    plot_field_peak_vs_t(code_name='fbpic', path='/home/ming/mnt/CNG12/FB/DCII/diag_k=35_a0=1.5_w0=8.9_dphase=0.0_1mmdope', field_name='e2', if_abs=True, use_num_list=True, count=9, linestyle='-')
+    h_ax = plot_field_peak_vs_t(code_name='fbpic', path='/home/zengming/project/FB/PTE_k28/diag_k=28_a0=15.7_w0=2.4_d=0', field_name='e2', if_abs=True, use_num_list=True, count=999, color='k', label='$d=0$')
+    plot_field_peak_vs_t(code_name='fbpic', path='/home/zengming/project/FB/PTE_k28/diag_k=28_a0=15.7_w0=2.4_d=56', field_name='e2', if_abs=True, use_num_list=True, count=999, h_ax = h_ax, color='r', label='$d=56$')
+    plot_field_peak_vs_t(code_name='fbpic', path='/home/zengming/project/FB/PTE_k28/diag_k=28_a0=15.7_w0=2.4_d=60', field_name='e2', if_abs=True, use_num_list=True, count=999, h_ax = h_ax, color='b', label='$d=60$')
+    plot_field_peak_vs_t(code_name='fbpic', path='/home/zengming/project/FB/PTE_k28/diag_k=28_a0=15.7_w0=2.4_d=70', field_name='e2', if_abs=True, use_num_list=True, count=999, h_ax = h_ax, color='g', label='$d=70$')
+    plot_field_peak_vs_t(code_name='fbpic', path='/home/zengming/project/FB/PTE_k28/diag_k=28_a0=15.7_w0=2.4_d=100', field_name='e2', if_abs=True, use_num_list=True, count=999, h_ax = h_ax, color='y', label='$d=100$')
+    '''h_ax = plot_field_peak_vs_t(code_name='fbpic', path='/home/zengming/project/FB/PTE/diag_k=25_a0=20.3_w0=2.7_d=0', field_name='e2', if_abs=True, use_num_list=True, count=999, color='k', label='$d=0$')
+    plot_field_peak_vs_t(code_name='fbpic', path='/home/zengming/project/FB/PTE/diag_k=25_a0=20.3_w0=2.7_d=80', field_name='e2', if_abs=True, use_num_list=True, count=999, h_ax = h_ax, color='r', label='$d=80$')
+    h_ax = plot_field_peak_vs_t(code_name='fbpic', path='/home/zengming/project/FB/PTE/diag_k=25_a0=20.3_w0=2.7_d=50', field_name='e2', if_abs=True, use_num_list=True, count=999, color='y', label='$d=50$')
+    plot_field_peak_vs_t(code_name='fbpic', path='/home/zengming/project/FB/PTE/diag_k=25_a0=20.3_w0=2.7_d=60', field_name='e2', if_abs=True, use_num_list=True, count=999, h_ax = h_ax, color='k', label='$d=60$')
+    plot_field_peak_vs_t(code_name='fbpic', path='/home/zengming/project/FB/PTE/diag_k=25_a0=20.3_w0=2.7_d=70', field_name='e2', if_abs=True, use_num_list=True, count=99, h_ax = h_ax, color='g', label='$d=70$')
+    plot_field_peak_vs_t(code_name='fbpic', path='/home/zengming/project/FB/PTE/diag_k=25_a0=20.3_w0=2.7_d=80', field_name='e2', if_abs=True, use_num_list=True, count=999, h_ax = h_ax, color='r', label='$d=80$')
+    plot_field_peak_vs_t(code_name='fbpic', path='/home/zengming/project/FB/PTE/diag_k=25_a0=20.3_w0=2.7_d=90', field_name='e2', if_abs=True, use_num_list=True, count=999, h_ax = h_ax, color='b', label='$d=90$')'''
+    plt.xlabel('$t$ [s]')
+    plt.ylabel('$E_L$ [V/m]')
+    plt.legend()
     plt.tight_layout()
     plt.show()

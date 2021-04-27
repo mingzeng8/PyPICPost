@@ -1355,19 +1355,18 @@ class OutFile:
 
 ################################method raw_hist_gamma################################
     def raw_hist_gamma(self, num_bins=256, range_max=None, range_min=None, if_select = False):
-        '''Get histogram from ene raw data +1 = gamma.'''
+        '''Get histogram of gamma. Remember to read_raw_gamma() before calling this.'''
         weights=np.absolute(self._raw_q)
-        gamma = self._raw_ene+1.
         if if_select:
             try:
                 weights = weights[self._raw_select_index]
-                gamma = gamma[self._raw_select_index]
+                self._raw_gamma = self._raw_gamma[self._raw_select_index]
             except: warnings.warn('Particle select condition is not valid! All particles are used.')
         if range_max is None:
-            range_max = gamma.max()
+            range_max = self._raw_gamma.max()
         if range_min is None:
-            range_min = gamma.min()
-        hist, bin_edges = np.histogram(gamma, num_bins, (range_min, range_max), weights=weights)
+            range_min = self._raw_gamma.min()
+        hist, bin_edges = np.histogram(self._raw_gamma, num_bins, (range_min, range_max), weights=weights)
         bin_edges = bin_edges[0:-1]
         return bin_edges, hist
 
