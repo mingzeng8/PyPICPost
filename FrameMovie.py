@@ -289,7 +289,9 @@ class Frames:
 ################################method plot_laser_driven################################
 #plot one frame for laser driven cases
     def plot_laser_driven(self, out_num, **kwargs):
-        h_fig = plt.figure(**kwargs)
+        if 'figsize' in kwargs: figsize = kwargs['figsize']
+        else: figsize = None
+        h_fig = plt.figure(figsize=figsize)
         self.outfile.out_num=out_num
         h_ax = h_fig.add_subplot(111)
         self.plot_background(h_fig, h_ax)
@@ -315,6 +317,8 @@ class Frames:
 
         self.plot_e1_psi_line(h_fig, h_ax)
         h_ax.set_aspect('equal', 'box')
+        if 'ylim' in kwargs:
+            plt.ylim(kwargs['ylim'])
         plt.tight_layout()
         return h_fig
 
