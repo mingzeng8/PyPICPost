@@ -400,7 +400,7 @@ class OutFile:
                         self._axis_range[1,i] = xmax[i]
                 else: self._num_dimensions = 3
             for i in self.fileid.keys():
-                if i!='AXIS':
+                if i not in {'AXIS', 'SIMULATION'}:
                     break
 ##value _data_name_in_file##
             self._data_name_in_file = i
