@@ -398,8 +398,6 @@ class OutFile:
                         xmax = self.fileid.attrs.get('XMAX')
                         xmin = self.fileid.attrs.get('XMIN')
                         nx = self.fileid.attrs.get('NX')
-                    print(xmax)
-                    print(filename)
                     self._num_dimensions = len(xmax)
 ##value _axis_range##
                     self._axis_range = np.zeros((2,self._num_dimensions), dtype=float_type)
