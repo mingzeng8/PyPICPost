@@ -389,9 +389,17 @@ class OutFile:
             except KeyError:
                 if self.code_name != 'quickpic':
                     # For RAW data, and HiPACE, 'AXIS' does not exist. Read simulation box information from the attribute
-                    xmax = self.fileid.attrs.get('XMAX')
-                    xmin = self.fileid.attrs.get('XMIN')
-                    nx = self.fileid.attrs.get('NX')
+                    try:
+                        # In new OSIRIS version, some of the attributes are moved to a "SIMULATION" group
+                        xmax = self.fileid["SIMULATION"].attrs.get('XMAX')
+                        xmin = self.fileid["SIMULATION"].attrs.get('XMIN')
+                        nx = self.fileid["SIMULATION"].attrs.get('NX')
+                    except KeyError:
+                        xmax = self.fileid.attrs.get('XMAX')
+                        xmin = self.fileid.attrs.get('XMIN')
+                        nx = self.fileid.attrs.get('NX')
+                    print(xmax)
+                    print(filename)
                     self._num_dimensions = len(xmax)
 ##value _axis_range##
                     self._axis_range = np.zeros((2,self._num_dimensions), dtype=float_type)
