@@ -15,10 +15,13 @@ def gaussian_profile_square( r, peak, w ):
     '''
     return peak*np.exp(-np.square(r)/(w*w/2.))
 
-def get_w_EL_vs_t(path, laser_pol='x', if_save_txt=False, if_save_plot=False, save_plot_type='pdf'):
+def get_w_EL_vs_t(path, laser_pol='x', if_save_txt=False, if_save_plot=False, save_plot_type='pdf', peak_method=1):
     '''
         Get w and laser E-field amplitude vs t using the projection of laser electric field squared.
         laser_pol: laser polarization direction, can be 'x' or 'y'.
+        peak_method: the method for getting the peak E-field
+                     0 means find the maximum axial value of the absolute value of E-field
+                     1 means find the amplitude of fit and normalize to the amplitude of E-field
         Returns:
         t: array of time
         w: array of laser radius
@@ -47,13 +50,17 @@ def get_w_EL_vs_t(path, laser_pol='x', if_save_txt=False, if_save_plot=False, sa
             w_guess = min(w_guess, half_rmax)
         popt, pcov = curve_fit( gaussian_profile_square, rspread, F_square_avg, p0=[F_square_avg[0], w_guess], bounds=((F_square_avg[0]*0.5, w_guess*0.1), (F_square_avg[0]*2., w_guess*2.)))
         w_array[i] = popt[1]
-        peak_array[i] = popt[0]
+        if 0==peak_method:
+            peak_array[i] = np.max(np.abs(F[F.shape[0]//2,:]))
+        else:
+            peak_array[i] = popt[0]
         # set w_guess for the next iteration
         w_guess = popt[1]
 
-    peak_array = np.sqrt(peak_array)
-    # normalize laser electric field according to initial value of peak electric field
-    peak_array = peak_array*(EL0/peak_array[0])
+    if 1==peak_method:
+        peak_array = np.sqrt(peak_array)
+        # normalize laser electric field according to initial value of peak electric field
+        peak_array = peak_array*(EL0/peak_array[0])
 
     if if_save_txt:
         data_save_name=path+"/w_vs_t.data"
