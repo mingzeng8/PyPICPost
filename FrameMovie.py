@@ -279,7 +279,7 @@ class Frames:
             except KeyError: warnings.warn("'{}' does not contain '{}'. Driver is not ploted.".format(self.outfile.path_filename, self.outfile.spec_name))
 
         if self.trail_spec_name is not None:
-            self.plot_trail(self, h_fig, h_ax)
+            self.plot_trail(h_fig, h_ax)
 
         self.plot_e1_psi_line(h_fig, h_ax)
         h_ax.set_aspect('equal','box')
