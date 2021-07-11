@@ -82,7 +82,7 @@ def get_w_EL_vs_t(path, laser_pol='x', if_save_txt=False, if_save_plot=False, sa
         h_ax2 = h_ax1.twinx()
         color2 = 'r'
         h_ax2.plot(ts.t, peak_array, color=color2)
-        h_ax2.set_ylabel("$E_L$ [m]", color=color2)
+        h_ax2.set_ylabel("$E_L$ [V/m]", color=color2)
         h_ax2.tick_params(axis='y', labelcolor=color2)
         plt.tight_layout()
         plot_save_name=path+"/w_vs_t."+save_plot_type
