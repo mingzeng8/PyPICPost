@@ -409,7 +409,7 @@ class Frames:
                     print('Iteration stops at frame number {0}. Exception message:\n{1}'.format(i, err))
                     break
                 else: print('Warning! File No. {0} missing. Exception message:\n{1}'.format(i, err))
-            except KeyError as err:
+            except Exception as err:
                 print('Number {} does not exist. Seems all files are processed. Finishing...'.format(i))
                 break
 

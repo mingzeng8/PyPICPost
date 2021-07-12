@@ -70,7 +70,7 @@ def plot_beam_parameters_vs_t(path, species_name, n0_per_cc=None, code_name='osi
             outfile_object.open(cell_size_qp_raw = cell_size_qp_raw)
             #set missing_file = 0 if success
             missing_file = 0
-        except IOError as err:
+        except Exception as err:
             missing_file += 1
             if missing_file>max_missing_file:
                 print('Warning: Cannot open file number {}. Iteration breaks. Exception message:\n{}'.format(i, err))
@@ -162,7 +162,7 @@ def plot_beam_parameters_vs_t(path, species_name, n0_per_cc=None, code_name='osi
 
 if __name__ == '__main__':
     h_f = plt.figure(figsize=(10,10))
-    #plot_beam_parameters_vs_t(code_name='hipace', use_num_list=True, path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1_Shared_Pardis_Ming/50um600pC1.1e16thh_mmtppc', species_name='trailer', n0_per_cc=1.e16, gamma_threshold=1., start=0, count=99999, stride=1, gamma_spread_method="rms", charge_abs=True, h_f=h_f, label='Page 6')
+    plot_beam_parameters_vs_t(code_name='quickpic', use_num_list=True, path='/public3/home/sc52073/zengm/jobs/qp_driver_damper/all_damper', species_name='Beam0001', n0_per_cc=5.0334e15, cell_size_qp_raw = [12./512., 12./512., 12.5/512.], gamma_threshold=1., start=0, count=9999, stride=1, gamma_spread_method="rms", charge_abs=True, h_f=h_f)
     #plot_beam_parameters_vs_t(code_name='hipace', use_num_list=True, path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1_Shared_Pardis_Ming/50um600pC1.1e16th_md', species_name='trailer', n0_per_cc=1.e16, gamma_threshold=1., start=0, count=99999, stride=1, t_offset=0., max_missing_file=1, gamma_spread_method="rms", charge_abs=True, h_f=h_f, linestyle='--', label='Page 7')
     #plot_beam_parameters_vs_t(code_name='hipace', use_num_list=True, path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1_Shared_Pardis_Ming/50um600pC1.1e16th_mdmt', species_name='trailer', n0_per_cc=1.e16, gamma_threshold=1., start=0, count=99999, stride=1, t_offset=0., max_missing_file=1, gamma_spread_method="rms", charge_abs=True, h_f=h_f, linestyle=':', label='Page 8')
     #plot_beam_parameters_vs_t(code_name='osiris', path='/home/zming/mnt/JSCRATCH/X1/scan_2020_1_14/He_Ar_2.0/1.0/y_-30um', species_name='driver', n0_per_cc=2.824e19, gamma_threshold=1., start=64, count=999, stride=1, gamma_spread_method="rms", charge_abs=True, h_f=h_f, label='driver')
@@ -176,6 +176,6 @@ if __name__ == '__main__':
     #plot_beam_parameters_vs_t(code_name='hipace', path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_beam3D/newhi_beam3D259', species_name='trailer', n0_per_cc=4.9e16, gamma_threshold=1., use_num_list=True, start=0, count=120, stride=1, linestyle='-', h_f=h_f)
     #plot_beam_parameters_vs_t(code_name='hipace', path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/hi_qp_compare/hi3', species_name='trailer', n0_per_cc=5.03e15, gamma_threshold=1., use_num_list=True, start=0, count=999, stride=1, linestyle='-', h_f=h_f)
     #plot_beam_parameters_vs_t(code_name='quickpic', path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/qp_hi_compare/qp1', species_name='Beam0003', n0_per_cc=5.03e15, gamma_threshold=1., use_num_list=True, start=0, count=99999, stride=1, linestyle='-', h_f=h_f, cell_size_qp_raw = np.array([0.046875, 0.046875, 0.025390625]))
-    plot_beam_parameters_vs_t(code_name='fbpic', path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/FB/fb_DCLII/1/diag_k=79_a0=4_w0=4_nodope', species_name='e', gamma_threshold=1000., use_num_list=True, start=45, count=5, stride=1, linestyle='-', h_f=h_f)
+    #plot_beam_parameters_vs_t(code_name='fbpic', path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/FB/fb_DCLII/1/diag_k=79_a0=4_w0=4_nodope', species_name='e', gamma_threshold=1000., use_num_list=True, start=45, count=5, stride=1, linestyle='-', h_f=h_f)
     plt.tight_layout()
     plt.show()
