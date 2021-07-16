@@ -11,7 +11,7 @@ import matplotlib as mpl
 mpl.use('Agg')
 
 class Frames:
-    def __init__(self, code_name = 'osiris', simulation_path = None, frame_folder = None, plot_type = 'laser_driven', plot_spec_name=None, average='', use_num_list = False, start_num = 0, stride_num=1, count_num=1, laser_field_name='e3', if_laser_profile=False, driver_spec_name='driver', driver_vmin=None, driver_vmax=None, background_spec_name='e', background_vmin=None, background_vmax=None, trail_spec_name=None, trail_vmin=None, trail_vmax=None, if_e1=False, e1_multiple=1., if_psi=False, psi_multiple=1., if_driver_cm=False, if_trail_cm=False, dir=2, project_dir=None, save_type='png', max_missing_file=0, plot_range=None):
+    def __init__(self, code_name = 'osiris', simulation_path = None, frame_folder = None, plot_type = 'laser_driven', plot_spec_name=None, average='', use_num_list = False, start_num = 0, stride_num=1, count_num=1, laser_field_name='e3', if_laser_profile=False, laser_cmap=None, density_type='charge', driver_spec_name='driver', driver_cmap=None, driver_vmin=None, driver_vmax=None, background_spec_name='e', background_cmap=None, background_vmin=None, background_vmax=None, trail_spec_name=None, trail_cmap=None, trail_vmin=None, trail_vmax=None, if_e1=False, e1_multiple=1., if_psi=False, psi_multiple=1., if_driver_cm=False, if_trail_cm=False, dir=2, project_dir=None, save_type='png', max_missing_file=0, plot_range=None):
         self.code_name = code_name
         self.simulation_path = simulation_path
         if frame_folder is None:
@@ -41,13 +41,18 @@ class Frames:
         self.plot_spec_name = plot_spec_name
         self.laser_field_name = laser_field_name
         self.if_laser_profile = if_laser_profile
+        self.laser_cmap = laser_cmap
+        self.density_type = density_type
         self.driver_spec_name = driver_spec_name
+        self.driver_cmap = driver_cmap
         self.driver_vmin = driver_vmin
         self.driver_vmax = driver_vmax
         self.background_spec_name = background_spec_name
+        self.background_cmap = background_cmap
         self.background_vmin = background_vmin
         self.background_vmax = background_vmax
         self.trail_spec_name = trail_spec_name
+        self.trail_cmap = trail_cmap
         self.trail_vmin = trail_vmin
         self.trail_vmax = trail_vmax
         self.if_e1 = if_e1
@@ -72,12 +77,12 @@ class Frames:
                 # If use_num_list is True, outfile.OutFile() will try to setup a file list while initialize. But if slice dump is not found, we try to find full grid dump file and do slicing.
                 # For QuickPIC and OSIRIS, fields may saved as slices
                 # fld_slice in {1, 2, 3} while dir in (0, 1, 2)
-                self.outfile = outfile.OutFile(code_name = code_name, path=simulation_path, field_name='charge', average=average, spec_name=background_spec_name, use_num_list = use_num_list, out_num=start_num, fld_slice=dir+1)
+                self.outfile = outfile.OutFile(code_name = code_name, path=simulation_path, field_name=self.density_type, average=average, spec_name=background_spec_name, use_num_list = use_num_list, out_num=start_num, fld_slice=dir+1)
                 if not os.path.isfile(self.outfile.path_filename):
                     raise FileNotFoundError
             except FileNotFoundError:
                 # For full grid dumps
-                self.outfile = outfile.OutFile(code_name = code_name, path=simulation_path, field_name='charge', average=average, spec_name=background_spec_name, use_num_list = use_num_list, out_num=start_num)
+                self.outfile = outfile.OutFile(code_name = code_name, path=simulation_path, field_name=self.density_type, average=average, spec_name=background_spec_name, use_num_list = use_num_list, out_num=start_num)
         else:
             self.outfile = outfile.OutFile(code_name = code_name, path=simulation_path, field_name='raw', spec_name=plot_spec_name, use_num_list = use_num_list, out_num=start_num)
 
@@ -176,29 +181,92 @@ class Frames:
 
     laser_field_name = property(get_laser_field_name, set_laser_field_name)
 
+################################property density_type################################
+    def get_density_type(self):
+        return self._density_type
+
+    def set_density_type(self, value):
+        allowed_density_types = {'charge','m'}
+        if value not in allowed_density_types: raise ValueError('density_type = {}, but allowed values are {}.'.format(value, allowed_density_types))
+        self._density_type = value
+
+    density_type = property(get_density_type, set_density_type)
+
+################################property laser_cmap################################
+    def get_laser_cmap(self):
+        return self._laser_cmap
+
+    def set_laser_cmap(self, value):
+        if value is None:
+            # set to default
+            if self.if_laser_profile: self._laser_cmap = plt.cm.Reds
+            else: self._laser_cmap = plt.cm.bwr
+        else: self._laser_cmap = value
+
+    laser_cmap = property(get_laser_cmap, set_laser_cmap)
+
+################################property driver_cmap################################
+    def get_driver_cmap(self):
+        return self._driver_cmap
+
+    def set_driver_cmap(self, value):
+        if value is None:
+            # set to default
+            if self.density_type=='charge': self._driver_cmap = plt.cm.hot
+            else: self._driver_cmap = plt.cm.hot.reversed()
+        else: self._driver_cmap = value
+
+    driver_cmap = property(get_driver_cmap, set_driver_cmap)
+
+################################property background_cmap################################
+    def get_background_cmap(self):
+        return self._background_cmap
+
+    def set_background_cmap(self, value):
+        if value is None:
+            # set to default
+            if self.density_type=='charge': self._background_cmap = 'gray'
+            else: self._background_cmap = 'gray_r'
+        else: self._background_cmap = value
+
+    background_cmap = property(get_background_cmap, set_background_cmap)
+
+################################property trail_cmap################################
+    def get_trail_cmap(self):
+        return self._trail_cmap
+
+    def set_trail_cmap(self, value):
+        if value is None:
+            # set to default
+            if self.density_type=='charge': self._trail_cmap = plt.cm.jet
+            else: self._trail_cmap = plt.cm.jet.reversed()
+        else: self._trail_cmap = value
+
+    trail_cmap = property(get_trail_cmap, set_trail_cmap)
+
 ################################method plot_background################################
 #plot background plasma
     def plot_background(self, h_fig, h_ax):
-        self.outfile.field_name='charge'
+        self.outfile.field_name=self.density_type
         self.outfile.spec_name=self.background_spec_name
         self.outfile.open()
         if self.outfile.num_dimensions>=3: self.outfile.read_data_slice(dir=self.dir)
         else: self.outfile.read_data()
-        self.outfile.plot_data(h_fig, h_ax, vmin=self.background_vmin, vmax=self.background_vmax, cmap='gray')
-        self.outfile._color_bar.set_label('$\\rho_e$')
+        self.outfile.plot_data(h_fig, h_ax, vmin=self.background_vmin, vmax=self.background_vmax, cmap=self.background_cmap)
+        self.outfile._color_bar.set_label('$\\rho_e$' if self.density_type=='charge' else '$n_e$')
         self.outfile.close()
 
 ################################method plot_trail################################
 #plot trailing beam
     def plot_trail(self, h_fig, h_ax):
-        self.outfile.field_name='charge'
+        self.outfile.field_name=self.density_type
         self.outfile.spec_name=self.trail_spec_name
         try:
             self.outfile.open()
             if self.outfile.num_dimensions>=3: self.outfile.read_data_slice(dir=self.dir)
             else: self.outfile.read_data()
-            self.outfile.plot_data(h_fig, h_ax, vmin=self.trail_vmin, vmax=self.trail_vmax, cmap=my_cmap.cmap_higher_range_transparent())
-            self.outfile._color_bar.set_label('$\\rho_t$')
+            self.outfile.plot_data(h_fig, h_ax, vmin=self.trail_vmin, vmax=self.trail_vmax, cmap=(my_cmap.cmap_higher_range_transparent(self.trail_cmap) if self.density_type=='charge' else my_cmap.cmap_lower_range_transparent(self.trail_cmap)))
+            self.outfile._color_bar.set_label('$\\rho_t$' if self.density_type=='charge' else '$n_t$')
             if self.if_trail_cm:
                 try:
                     self.outfile.data_center_of_mass2d()
@@ -260,14 +328,14 @@ class Frames:
         self.plot_background(h_fig, h_ax)
 
         if self.driver_spec_name is not None:
-            self.outfile.field_name='charge'
+            self.outfile.field_name=self.density_type
             self.outfile.spec_name=self.driver_spec_name
             try:
                 self.outfile.open()
                 if self.outfile.num_dimensions>=3: self.outfile.read_data_slice(dir=self.dir)
                 else: self.outfile.read_data()
-                self.outfile.plot_data(h_fig, h_ax, vmin=self.driver_vmin, vmax=self.driver_vmax, cmap=my_cmap.cmap_higher_range_transparent(plt.cm.hot))
-                self.outfile._color_bar.set_label('$\\rho_d$')
+                self.outfile.plot_data(h_fig, h_ax, vmin=self.driver_vmin, vmax=self.driver_vmax, cmap=(my_cmap.cmap_higher_range_transparent(self.driver_cmap) if self.density_type=='charge' else my_cmap.cmap_lower_range_transparent(self.driver_cmap)))
+                self.outfile._color_bar.set_label('$\\rho_d$' if self.density_type=='charge' else '$n_d$')
                 if self.if_driver_cm:
                     try:
                         self.outfile.data_center_of_mass2d()
@@ -305,8 +373,8 @@ class Frames:
                 # When if_laser_profile is Ture, plot the laser profile instead of original E-field
                 if self.if_laser_profile:
                     self.outfile.data_profile2d()
-                    self.outfile.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_lower_range_transparent(plt.cm.Reds, transparency_transition_region=[0.15,0.4]))
-                else: self.outfile.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_middle_range_transparent())
+                    self.outfile.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_lower_range_transparent(self.laser_cmap, transparency_transition_region=[0.15,0.4]))
+                else: self.outfile.plot_data(h_fig, h_ax, cmap=my_cmap.cmap_middle_range_transparent(self.laser_cmap))
                 self.outfile._color_bar.set_label('$E_L$')
                 self.outfile.close()
             except FileNotFoundError: warnings.warn('Laser file {} not found. Laser is not ploted.'.format(self.outfile.path_filename))
