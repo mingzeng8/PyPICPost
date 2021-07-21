@@ -42,7 +42,7 @@ def get_beam_parameters(outfile_object, n0_per_cc=None, gamma_threshold=0., gamm
     else: raise NotImplementedError("Method of {} for gamma spread of the beam has not been implemented yet!".format(gamma_spread_method))
     return outfile_object.time, q_pC, emittances, gamma, gamma_spread, Courant_Snyder_parameters
 
-def plot_beam_parameters_vs_t(path, species_name, n0_per_cc=None, code_name='osiris', gamma_threshold=1., use_num_list=False, start=0, count=0, stride=1, t_offset = 0., max_missing_file=0, gamma_spread_method="lfit", h_f=None, charge_abs=False, linestyle='-', label = None, cell_size_qp_raw = None):
+def plot_beam_parameters_vs_t(path, species_name, n0_per_cc=None, code_name='osiris', gamma_threshold=1., use_num_list=False, start=0, count=0, stride=1, t_offset = 0., max_missing_file=0, gamma_spread_method="lfit", h_f=None, charge_abs=False, linestyle='-', label = None, cell_size_qp_raw = None, charge_multiply=1.):
     '''
     max_missing_file is the maximum continue files missing allowed. HiPACE sometimes fails in dumping output files.
     '''
@@ -95,7 +95,7 @@ def plot_beam_parameters_vs_t(path, species_name, n0_per_cc=None, code_name='osi
     if h_f is None: h_f = plt.figure()
     h_ax = h_f.add_subplot(331)
     if charge_abs: q_pC_array = np.abs(q_pC_array)
-    h_ax.plot(t_array, q_pC_array, linestyle = linestyle, label=label)
+    h_ax.plot(t_array, q_pC_array*charge_multiply, linestyle = linestyle, label=label)
     plt.minorticks_on()
     plt.ylim()
     plt.xlabel('t [$\\omega_p$]')
@@ -162,7 +162,7 @@ def plot_beam_parameters_vs_t(path, species_name, n0_per_cc=None, code_name='osi
 
 if __name__ == '__main__':
     h_f = plt.figure(figsize=(10,10))
-    plot_beam_parameters_vs_t(code_name='quickpic', use_num_list=True, path='/public3/home/sc52073/zengm/jobs/qp_driver_damper/all_damper', species_name='Beam0001', n0_per_cc=5.0334e15, cell_size_qp_raw = [12./512., 12./512., 12.5/512.], gamma_threshold=1., start=0, count=9999, stride=1, gamma_spread_method="rms", charge_abs=True, h_f=h_f)
+    plot_beam_parameters_vs_t(code_name='quickpic', use_num_list=True, path='/public3/home/sc52073/zengm/jobs/qp_driver_damper/damper_half_5e7', species_name='Beam0002', n0_per_cc=5.0334e15, cell_size_qp_raw = [12./512., 12./512., 12.5/512.], gamma_threshold=1., start=0, count=9999, stride=1, gamma_spread_method="rms", charge_abs=True, h_f=h_f, charge_multiply=1)
     #plot_beam_parameters_vs_t(code_name='hipace', use_num_list=True, path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1_Shared_Pardis_Ming/50um600pC1.1e16th_md', species_name='trailer', n0_per_cc=1.e16, gamma_threshold=1., start=0, count=99999, stride=1, t_offset=0., max_missing_file=1, gamma_spread_method="rms", charge_abs=True, h_f=h_f, linestyle='--', label='Page 7')
     #plot_beam_parameters_vs_t(code_name='hipace', use_num_list=True, path='/beegfs/desy/group/fla/plasma/OSIRIS-runs/2D-runs/MZ/X1_Shared_Pardis_Ming/50um600pC1.1e16th_mdmt', species_name='trailer', n0_per_cc=1.e16, gamma_threshold=1., start=0, count=99999, stride=1, t_offset=0., max_missing_file=1, gamma_spread_method="rms", charge_abs=True, h_f=h_f, linestyle=':', label='Page 8')
     #plot_beam_parameters_vs_t(code_name='osiris', path='/home/zming/mnt/JSCRATCH/X1/scan_2020_1_14/He_Ar_2.0/1.0/y_-30um', species_name='driver', n0_per_cc=2.824e19, gamma_threshold=1., start=64, count=999, stride=1, gamma_spread_method="rms", charge_abs=True, h_f=h_f, label='driver')
