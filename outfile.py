@@ -695,8 +695,8 @@ class OutFile:
                     p = p[self._raw_select_index]
                 except: warnings.warn('Particle select condition is not valid! All particles are used.')
             # Centering
-            x = x - np.average(x)
-            p = p - np.average(x)
+            x = x - np.sum(x*weights)/sum_weight
+            p = p - np.sum(p*weights)/sum_weight
             # The geometric emittance calculation refer to
             # http://nicadd.niu.edu/~syphers/uspas/2018w/some-notes-on-ellipses.html
             # unnormalize x to mm
