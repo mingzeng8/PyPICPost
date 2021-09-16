@@ -895,11 +895,18 @@ class OutFile:
                     pos_index = 0
                     pos = self._axis_range[0, dir_in_AXIS]
             # Read date matrix from h5 file
-            new_shape = [self.fileid[self._data_name_in_file].shape[i] if i != dir_in_data else 1 for i in range(3)]
-            slice_tuple = tuple([slice(None, None, None) if i != dir_in_data else pos_index for i in range(3)])
-            self._data = np.zeros(new_shape, dtype=float_type)
-            self.fileid[self._data_name_in_file].read_direct(self._data, source_sel=slice_tuple)
-            self._data = np.squeeze(self._data)
+            try:
+                # This is to adapt different versions of h5py.
+                new_shape = [self.fileid[self._data_name_in_file].shape[i] for i in range(3) if i != dir_in_data]
+                slice_tuple = tuple([slice(None, None, None) if i != dir_in_data else pos_index for i in range(3)])
+                self._data = np.zeros(new_shape, dtype=float_type)
+                self.fileid[self._data_name_in_file].read_direct(self._data, source_sel=slice_tuple)
+            except:
+                new_shape = [self.fileid[self._data_name_in_file].shape[i] if i != dir_in_data else 1 for i in range(3)]
+                slice_tuple = tuple([slice(None, None, None) if i != dir_in_data else pos_index for i in range(3)])
+                self._data = np.zeros(new_shape, dtype=float_type)
+                self.fileid[self._data_name_in_file].read_direct(self._data, source_sel=slice_tuple)
+                self._data = np.squeeze(self._data)
             if self.code_name=='hipace' or (self.code_name=='quickpic' and dir!=0):
                 # Transpose if because the data axes order is reversed compared to OSIRIS, for all dir cases of HiPACE and dir==1, 2 cases of QuickPIC
                 self._data = np.transpose(self._data)
