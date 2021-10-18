@@ -2,6 +2,7 @@ import numpy as np
 import h5py
 import matplotlib.pyplot as plt
 import TwoDGaussianFit as tdgf
+import LorentzianFit as lfit
 from scipy import signal, pi
 from scipy import e as const_e
 from scipy.constants import e as e_charge
@@ -536,8 +537,9 @@ class OutFile:
 # r_low, r_up: lower and upper limits of radius of position, i.e. sqrt(x2^2+x3^2).
 # sample_size: select a random sample of size sample_size from selected macro particles according to the former conditions. sample_size overrides sample_rate.
 # sample_rate: a number between 0 and 1. sample_size = int(sample_rate * number of remaining particles from former range selections). If sample_size is not None, this parameter is ignored.
+# if_renew: a boolean specifing whether renew the selection index array. If ture, the selection array is a new one. If false, the selection array is based on the existing self._raw_select_index.
 # set self._raw_select_index with the selection index array, and also return this array.
-    def select_raw_data(self, x1_low=None, x1_up=None, x2_low=None, x2_up=None, x3_low=None, x3_up=None, p1_low=None, p1_up=None, p2_low=None, p2_up=None, p3_low=None, p3_up=None, ene_low=None, ene_up=None, r_low=None, r_up=None, sample_size=None, sample_rate=None):
+    def select_raw_data(self, x1_low=None, x1_up=None, x2_low=None, x2_up=None, x3_low=None, x3_up=None, p1_low=None, p1_up=None, p2_low=None, p2_up=None, p3_low=None, p3_up=None, ene_low=None, ene_up=None, r_low=None, r_up=None, sample_size=None, sample_rate=None, if_renew = True):
         #get number of particles
         try: n_part = self._raw_tag.size // 2
         except AttributeError:
@@ -557,9 +559,19 @@ class OutFile:
                                     except AttributeError:
                                         n_part = self._raw_ene.size
         #select_list is a boolean list, if one of its element is True, the corresponding macro particle is selected
-        select_list = np.full(n_part, True, dtype=bool)
+        if if_renew:
+            # Setting up a renewed selection
+            select_list = np.full(n_part, True, dtype=bool)
+        else:
+            try:
+                # Setting up the selection beased on the previous selection
+                select_list = np.full(n_part, False, dtype=bool)
+                select_list[self._raw_select_index] = True
+            except:
+                warnings.warn('self._raw_select_index is not valid! Setting up a new selection array.')
+                select_list = np.full(n_part, True, dtype=bool)
         if x1_low is not None:
-            select_list = self._raw_x1 > x1_low
+            select_list = self._raw_x1 > x1_low & (select_list)
         if x1_up is not None:
             select_list = (self._raw_x1 < x1_up) & (select_list)
         if x2_low is not None:
@@ -1062,7 +1074,7 @@ class OutFile:
         '''
             Get a slice spread of a 2D data along "dir" direction.
             self._data will be transformed to a 1D numpy array.
-            method: can be either 'rms' (root-mean-square) or 'lfit' (fit by Lorentz function)
+            method: can be either 'rms' (root-mean-square) or 'lfit' (fit by Lorentzian function)
         '''
         if 1==dir: weights = self._data
         else: weights = np.transpose(self._data)
@@ -1543,7 +1555,11 @@ class OutFile:
            If if_select and self._raw_select_index is valid, use selection of macroparticles.
            Otherwise use all the macroparticles.'''
         weights=np.absolute(self._raw_q)
-        ene = self._raw_ene
+        try:
+            ene = self._raw_ene
+        except:
+            ene = self._raw_gamma-1.
+            self._raw_ene = ene
         if if_select:
             try:
                 weights = weights[self._raw_select_index]
@@ -1552,6 +1568,41 @@ class OutFile:
         ene_avg, sum_weights = np.average(ene, weights=weights, returned=True)
         ene_rms_spread = np.sqrt(np.sum(np.square(ene-ene_avg)*weights)/sum_weights)
         return ene_avg, ene_rms_spread
+
+################################method charge_pC_within_rms_ene################################
+    def charge_pC_within_rms_ene(self, if_select = False, multiple = 1., n0_per_cc = None):
+        '''Return the charge within multiple times RMS spread of ene.
+           If if_select and self._raw_select_index is valid, use selection of macroparticles.
+           Otherwise use all the macroparticles.
+           The self._raw_select_index is changed in this function.'''
+        ene_avg, ene_rms_spread = self.raw_mean_rms_ene(if_select = if_select)
+        # Set up new selection
+        self.select_raw_data(ene_low=ene_avg-ene_rms_spread*multiple, ene_up=ene_avg+ene_rms_spread*multiple, if_renew = ~if_select)
+        return self.calculate_q_pC(n0_per_cc = n0_per_cc, if_select = True), ene_avg, ene_rms_spread
+
+################################method ene_hist_lorentz_fit################################
+    def ene_hist_lorentz_fit(self, num_bins=256, range_max=None, range_min=None, initial_guess=None, if_select = False):
+        '''Return weighted histogram of energy (spectrum) and Lorentzian fit prameters.
+           If if_select and self._raw_select_index is valid, use selection of macroparticles.
+           Otherwise use all the macroparticles.'''
+        ene, hist = self.raw_hist_gamma(num_bins=num_bins, range_max=range_max, range_min=range_min, if_select = if_select)
+        # Transform to ene = gamma - 1
+        ene -= 1.
+        popt, pcov = lfit.FitLorentzian(ene, hist, initial_guess=initial_guess)
+        return ene, hist, popt, pcov
+
+################################method charge_pC_within_fwhm_ene################################
+    def charge_pC_within_fwhm_ene(self, num_bins=256, range_max=None, range_min=None, initial_guess=None, if_select = False, multiple = 1., n0_per_cc = None):
+        '''Return the charge within multiple times RMS spread of ene.
+           If if_select and self._raw_select_index is valid, use selection of macroparticles.
+           Otherwise use all the macroparticles.'''
+        ene, hist, popt, pcov = self.ene_hist_lorentz_fit(num_bins=num_bins, range_max=range_max, range_min=range_min, initial_guess=initial_guess, if_select = if_select)
+        # Set up new selection
+        # popt[0] if the peak ene value
+        # popt[2] is the value of half width at half maximum obtained by the Lorentzian fit
+        self.select_raw_data(ene_low=popt[0]-popt[2]*multiple, ene_up=popt[0]+popt[2]*multiple, if_renew = ~if_select)
+        charge_in_fwhm = self.calculate_q_pC(n0_per_cc = n0_per_cc, if_select = True)
+        return charge_in_fwhm, ene, hist, popt, pcov
 
 ################################method plot_data################################
     def plot_data(self, *args, **kwargs):
