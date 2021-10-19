@@ -539,7 +539,7 @@ class OutFile:
 # sample_rate: a number between 0 and 1. sample_size = int(sample_rate * number of remaining particles from former range selections). If sample_size is not None, this parameter is ignored.
 # if_renew: a boolean specifing whether renew the selection index array. If ture, the selection array is a new one. If false, the selection array is based on the existing self._raw_select_index.
 # set self._raw_select_index with the selection index array, and also return this array.
-    def select_raw_data(self, x1_low=None, x1_up=None, x2_low=None, x2_up=None, x3_low=None, x3_up=None, p1_low=None, p1_up=None, p2_low=None, p2_up=None, p3_low=None, p3_up=None, ene_low=None, ene_up=None, r_low=None, r_up=None, sample_size=None, sample_rate=None, if_renew = True):
+    def select_raw_data(self, x1_low=None, x1_up=None, x2_low=None, x2_up=None, x3_low=None, x3_up=None, p1_low=None, p1_up=None, p2_low=None, p2_up=None, p3_low=None, p3_up=None, ene_low=None, ene_up=None, gamma_low=None, gamma_up=None, r_low=None, r_up=None, sample_size=None, sample_rate=None, if_renew = True):
         #get number of particles
         try: n_part = self._raw_tag.size // 2
         except AttributeError:
@@ -557,7 +557,9 @@ class OutFile:
                                 except AttributeError:
                                     try: n_part = self._raw_p3.size
                                     except AttributeError:
-                                        n_part = self._raw_ene.size
+                                        try: n_part = self._raw_ene.size
+                                        except AttributeError:
+                                            n_part = self._raw_gamma.size
         #select_list is a boolean list, if one of its element is True, the corresponding macro particle is selected
         if if_renew:
             # Setting up a renewed selection
@@ -607,6 +609,10 @@ class OutFile:
             select_list = (self._raw_ene > ene_low) & (select_list)
         if ene_up is not None:
             select_list = (self._raw_ene < ene_up) & (select_list)
+        if gamma_low is not None:
+            select_list = (self._raw_gamma > gamma_low) & (select_list)
+        if gamma_up is not None:
+            select_list = (self._raw_gamma < gamma_up) & (select_list)
 
         #debug: for predictable samples
         np.random.seed(0)
@@ -1549,60 +1555,58 @@ class OutFile:
         h_fig, h_ax = self.plot_data(h_fig, h_ax, **kwargs)
         return h_fig, h_ax
 
-################################method raw_mean_rms_ene################################
-    def raw_mean_rms_ene(self, if_select = False):
-        '''Return weighted mean value and RMS spread of ene.
+################################method raw_mean_rms_gamma################################
+    def raw_mean_rms_gamma(self, if_select = False):
+        '''Return weighted mean value and RMS spread of gamma.
            If if_select and self._raw_select_index is valid, use selection of macroparticles.
            Otherwise use all the macroparticles.'''
         weights=np.absolute(self._raw_q)
         try:
-            ene = self._raw_ene
+            gamma = self._raw_gamma
         except:
-            ene = self._raw_gamma-1.
-            self._raw_ene = ene
+            gamma = self._raw_ene+1.
+            self._raw_gamma = gamma
         if if_select:
             try:
                 weights = weights[self._raw_select_index]
-                ene = ene[self._raw_select_index]
+                gamma = gamma[self._raw_select_index]
             except: warnings.warn('Particle select condition is not valid! All particles are used.')
-        ene_avg, sum_weights = np.average(ene, weights=weights, returned=True)
-        ene_rms_spread = np.sqrt(np.sum(np.square(ene-ene_avg)*weights)/sum_weights)
-        return ene_avg, ene_rms_spread
+        gamma_avg, sum_weights = np.average(gamma, weights=weights, returned=True)
+        gamma_rms_spread = np.sqrt(np.sum(np.square(gamma-gamma_avg)*weights)/sum_weights)
+        return gamma_avg, gamma_rms_spread
 
-################################method charge_pC_within_rms_ene################################
-    def charge_pC_within_rms_ene(self, if_select = False, multiple = 1., n0_per_cc = None):
-        '''Return the charge within multiple times RMS spread of ene.
+################################method charge_pC_within_rms_gamma################################
+    def charge_pC_within_rms_gamma(self, if_select = False, multiple = 1., n0_per_cc = None):
+        '''Return the charge within multiple times RMS spread of gamma.
            If if_select and self._raw_select_index is valid, use selection of macroparticles.
            Otherwise use all the macroparticles.
            The self._raw_select_index is changed in this function.'''
-        ene_avg, ene_rms_spread = self.raw_mean_rms_ene(if_select = if_select)
+        gamma_avg, gamma_rms_spread = self.raw_mean_rms_gamma(if_select = if_select)
         # Set up new selection
-        self.select_raw_data(ene_low=ene_avg-ene_rms_spread*multiple, ene_up=ene_avg+ene_rms_spread*multiple, if_renew = ~if_select)
-        return self.calculate_q_pC(n0_per_cc = n0_per_cc, if_select = True), ene_avg, ene_rms_spread
+        self.select_raw_data(gamma_low=gamma_avg-gamma_rms_spread*multiple, gamma_up=gamma_avg+gamma_rms_spread*multiple, if_renew = ~if_select)
+        return self.calculate_q_pC(n0_per_cc = n0_per_cc, if_select = True), gamma_avg, gamma_rms_spread
 
-################################method ene_hist_lorentz_fit################################
-    def ene_hist_lorentz_fit(self, num_bins=256, range_max=None, range_min=None, initial_guess=None, if_select = False):
-        '''Return weighted histogram of energy (spectrum) and Lorentzian fit prameters.
+################################method gamma_hist_lorentz_fit################################
+    def gamma_hist_lorentz_fit(self, num_bins=256, range_max=None, range_min=None, initial_guess=None, if_select = False):
+        '''Return weighted histogram of gamma (spectrum) and Lorentzian fit prameters.
            If if_select and self._raw_select_index is valid, use selection of macroparticles.
            Otherwise use all the macroparticles.'''
-        ene, hist = self.raw_hist_gamma(num_bins=num_bins, range_max=range_max, range_min=range_min, if_select = if_select)
-        # Transform to ene = gamma - 1
-        ene -= 1.
-        popt, pcov = lfit.FitLorentzian(ene, hist, initial_guess=initial_guess)
-        return ene, hist, popt, pcov
+        gamma, hist = self.raw_hist_gamma(num_bins=num_bins, range_max=range_max, range_min=range_min, if_select = if_select)
+        popt, pcov = lfit.FitLorentzian(gamma, hist, initial_guess=initial_guess)
+        return gamma, hist, popt, pcov
 
-################################method charge_pC_within_fwhm_ene################################
-    def charge_pC_within_fwhm_ene(self, num_bins=256, range_max=None, range_min=None, initial_guess=None, if_select = False, multiple = 1., n0_per_cc = None):
-        '''Return the charge within multiple times RMS spread of ene.
+################################method charge_pC_within_fwhm_gamma################################
+    def charge_pC_within_fwhm_gamma(self, num_bins=256, range_max=None, range_min=None, initial_guess=None, if_select = False, multiple = 1., n0_per_cc = None):
+        '''Return the charge within multiple times RMS spread of gamma.
            If if_select and self._raw_select_index is valid, use selection of macroparticles.
            Otherwise use all the macroparticles.'''
-        ene, hist, popt, pcov = self.ene_hist_lorentz_fit(num_bins=num_bins, range_max=range_max, range_min=range_min, initial_guess=initial_guess, if_select = if_select)
+        gamma, hist, popt, pcov = self.gamma_hist_lorentz_fit(num_bins=num_bins, range_max=range_max, range_min=range_min, initial_guess=initial_guess, if_select = if_select)
         # Set up new selection
-        # popt[0] if the peak ene value
+        # popt[0] if the peak gamma value
         # popt[2] is the value of half width at half maximum obtained by the Lorentzian fit
-        self.select_raw_data(ene_low=popt[0]-popt[2]*multiple, ene_up=popt[0]+popt[2]*multiple, if_renew = ~if_select)
+        self.select_raw_data(gamma_low=popt[0]-popt[2]*multiple, gamma_up=popt[0]+popt[2]*multiple, if_renew = ~if_select)
         charge_in_fwhm = self.calculate_q_pC(n0_per_cc = n0_per_cc, if_select = True)
-        return charge_in_fwhm, ene, hist, popt, pcov
+        return charge_in_fwhm, gamma, hist, popt, pcov
 
 ################################method plot_data################################
     def plot_data(self, *args, **kwargs):
