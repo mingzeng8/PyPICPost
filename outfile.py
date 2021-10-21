@@ -738,6 +738,46 @@ class OutFile:
             norm_emittances[i] = eps_pi*mean_p1
         return norm_emittances, [alphas, betas, gammas]
 
+################################method beam_energy_joule################################
+# calculate the beam (kinetic) energy in unit of joule
+# please call read_raw_q() and read_raw_gamma() before this function
+# if_select = False: use all the macro particles
+# if_select = True: only use the macro particles with index in self._raw_select_index
+    def beam_energy_joule(self, n0_per_cc = None, if_select = False):
+        '''
+        n0_per_cc: reference density in simulation, in unit of per centimeter cube. This is not required for FBPIC.
+        when if_select = True, only calculate the selected macro particles according to self._raw_select_index.
+        For code using normalized units (OSIRIS, HiPACE, QuickPIC, etc.), q is actually the normalized density.
+        The number of actual electrons = q*n0*V_cell_norm*k0**-3 = q*V_cell_norm*n0**-0.5*(4pi*r_e)**-1.5
+        The energy of a single electron = q*(gamma-1)*V_cell_norm*n0**-0.5*(4pi*r_e)**-1.5*m_e*c*c
+        and k0=(4*pi*r_e*n0)**0.5, where r_e is classical electron radius.
+        So total beam energy = sum(q*(gamma-1))*V_cell_norm*n0**-0.5*(4pi*r_e)**-1.5*m_e*c*c
+                             = sum(q*(gamma-1))*V_cell_norm*n0_per_cc**-0.5*12286.20952389124
+        '''
+        q_array = self._raw_q
+        gamma_array = self._raw_gamma
+        if if_select:
+            try:
+                if 0==len(self._raw_select_index):
+                    print("Warning: no particle is selected! Charge is set to 0.")
+                    return 0.0
+                q_array = q_array[self._raw_select_index]
+                gamma_array = gamma_array[self._raw_select_index]
+            except: warnings.warn('Particle select condition is not valid! All particles are used.')
+        if self.code_name == 'fbpic':
+            # For FBPIC, self._raw_q is the number of actual particles
+            # m_e * c * c = 8.187105776823886e-14 J
+            return np.sum(q_array*(gamma_array-1.))*8.187105776823886e-14
+        else:
+            assert isinstance(n0_per_cc, float), "n0_per_cc should be a float!"
+            #normalized cell volume
+            cell_volume_norm = 1.0
+            for i in range(self.num_dimensions):
+                cell_volume_norm = cell_volume_norm*self._cell_size[i]
+            if 3>self.num_dimensions:
+                print('Warning! Similation is in {} dimensional. Charge calculation may not be correct.'.format(self.num_dimensions))
+            return np.sum(q_array*(gamma_array-1.))*cell_volume_norm/np.sqrt(n0_per_cc)*12286.20952389124
+
 ################################method save_tag_file################################
 # Save tage file for particle tracking
 # in a tag file of OSIRIS, the ! symble is for comment;
@@ -1599,11 +1639,14 @@ class OutFile:
     def charge_pC_within_fwhm_gamma(self, num_bins=256, range_max=None, range_min=None, initial_guess=None, if_select = False, multiple = 1., n0_per_cc = None):
         '''Return the charge within multiple times RMS spread of gamma.
            If if_select and self._raw_select_index is valid, use selection of macroparticles.
-           Otherwise use all the macroparticles.'''
+           Otherwise use all the macroparticles.
+           Note: This function changes self._raw_select_index.
+        '''
         gamma, hist, popt, pcov = self.gamma_hist_lorentz_fit(num_bins=num_bins, range_max=range_max, range_min=range_min, initial_guess=initial_guess, if_select = if_select)
         # Set up new selection
         # popt[0] if the peak gamma value
         # popt[2] is the value of half width at half maximum obtained by the Lorentzian fit
+        # The following changes self._raw_select_index
         self.select_raw_data(gamma_low=popt[0]-popt[2]*multiple, gamma_up=popt[0]+popt[2]*multiple, if_renew = ~if_select)
         charge_in_fwhm = self.calculate_q_pC(n0_per_cc = n0_per_cc, if_select = True)
         return charge_in_fwhm, gamma, hist, popt, pcov
