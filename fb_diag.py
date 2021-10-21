@@ -88,5 +88,6 @@ def get_w_EL_vs_t(path, laser_pol='x', if_save_txt=False, if_save_plot=False, sa
         plot_save_name=path+"/w_vs_t."+save_plot_type
         plt.savefig(plot_save_name)
         print('Plot saved at '+plot_save_name)
+        plt.close()
 
     return ts.t, w_array, peak_array
