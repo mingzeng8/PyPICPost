@@ -573,7 +573,7 @@ class OutFile:
                 warnings.warn('self._raw_select_index is not valid! Setting up a new selection array.')
                 select_list = np.full(n_part, True, dtype=bool)
         if x1_low is not None:
-            select_list = self._raw_x1 > x1_low & (select_list)
+            select_list = (self._raw_x1 > x1_low) & (select_list)
         if x1_up is not None:
             select_list = (self._raw_x1 < x1_up) & (select_list)
         if x2_low is not None:
