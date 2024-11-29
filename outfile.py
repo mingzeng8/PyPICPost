@@ -3,9 +3,10 @@ import h5py
 import matplotlib.pyplot as plt
 import TwoDGaussianFit as tdgf
 import LorentzianFit as lfit
-from scipy import signal, pi
-from scipy import e as const_e
+from scipy import signal
+from math import e as const_e
 from scipy.constants import e as e_charge
+from scipy.constants import pi
 from scipy.signal import find_peaks
 from matplotlib.colors import LogNorm
 from glob import glob
