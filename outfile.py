@@ -4,9 +4,10 @@ import matplotlib.pyplot as plt
 import TwoDGaussianFit as tdgf
 import LorentzianFit as lfit
 from scipy import signal
-from math import e as const_e
-from scipy.constants import e as e_charge
 from scipy.constants import pi
+from scipy import e as const_e
+from scipy.constants import e as e_charge
+from scipy.constants import c as c_speed
 from scipy.signal import find_peaks
 from matplotlib.colors import LogNorm
 from glob import glob
@@ -1444,7 +1445,7 @@ class OutFile:
         return bin_edges, hist
 
 ################################method raw_hist_current################################
-    def raw_hist_current(self, n0_per_cc, dir=1, num_bins=256, range_max=None, range_min=None, if_select = False, if_abs=True):
+    def raw_hist_current(self, n0_per_cc=None, dir=1, num_bins=256, range_max=None, range_min=None, if_select = False, if_abs=True):
         '''Get histogram for current distribution.
         dir : integer
               The longitudinal direction. 1 for z, 2 for x, 3 for y.
@@ -1468,17 +1469,21 @@ class OutFile:
         hist, bin_edges = np.histogram(z, num_bins, (range_min, range_max), weights=q, density=False)
         bin_edges = bin_edges[0:-1]
 
-        # Transform charge to Coulomb
-        cell_volume_norm = 1.0
-        for i in range(self.num_dimensions):
-            cell_volume_norm = cell_volume_norm*self._cell_size[i]
-        if 3>self.num_dimensions:
-            print('Warning! Similation is in {} dimensional. Charge calculation may not be correct.'.format(self.num_dimensions))
-        hist *= (cell_volume_norm/np.sqrt(n0_per_cc)*2.404351211612064e-2)
+        if 'fbpic' == self.code_name:
+            hist *= e_charge/(bin_edges[1]-bin_edges[0])*c_speed #in unit of Amper
+        else:
+            if n0_per_cc is None: raise RuntimeError('Code {} need the parameter n0_per_cc for the current calculation!'.format(self.code_name))
+            # Transform charge to Coulomb
+            cell_volume_norm = 1.0
+            for i in range(self.num_dimensions):
+                cell_volume_norm = cell_volume_norm*self._cell_size[i]
+            if 3>self.num_dimensions:
+                print('Warning! Similation is in {} dimensional. Charge calculation may not be correct.'.format(self.num_dimensions))
+            hist *= (cell_volume_norm/np.sqrt(n0_per_cc)*2.404351211612064e-2)
 
-        # Transform to Amper
-        one_over_k0_m_square = 2.8239587227915743e7/n0_per_cc
-        hist /= (bin_edges[1]-bin_edges[0])*one_over_k0_m_square**0.5/2.99792458e8
+            # Transform to Amper
+            one_over_k0_m_square = 2.8239587227915743e7/n0_per_cc
+            hist /= (bin_edges[1]-bin_edges[0])*one_over_k0_m_square**0.5/2.99792458e8
 
         return bin_edges, hist
 
