@@ -5,7 +5,7 @@ import TwoDGaussianFit as tdgf
 import LorentzianFit as lfit
 from scipy import signal
 from scipy.constants import pi
-from scipy import e as const_e
+from math import e as const_e
 from scipy.constants import e as e_charge
 from scipy.constants import c as c_speed
 from scipy.signal import find_peaks
